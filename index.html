@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>Event Console — 런처</title>
+    <style>
+      /* 런처도 방송 그래픽 규칙을 따른다 — 무채 베이스 + 골드 액센트 1색,
+         라운드 ≤4px, 그라디언트 전면 채색 금지. 폰트는 이 페이지만 시스템 스택
+         (번들 woff2는 control/display 번들에 물려 있고, 런처는 JS 없이 즉시 떠야 한다). */
+      :root {
+        color-scheme: dark;
+        --bg: #04070d;
+        --surface: #0f1725;
+        --surface-2: #172032;
+        --line: rgba(255, 255, 255, 0.09);
+        --fg: #ffffff;
+        --fg-dim: #94a0b3;
+        --fg-mute: #5f6b7e;
+        --accent: #e8b94c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: -0.015em;
+      }
+      main { width: 640px; max-width: calc(100vw - 48px); padding: 40px 0; }
+      .eyebrow {
+        display: inline-flex; align-items: center; gap: 9px;
+        font-size: 12px; font-weight: 700; color: var(--fg-dim);
+      }
+      .eyebrow::before { content: ''; width: 3px; height: 13px; background: var(--accent); }
+      h1 {
+        font-size: 40px; margin: 12px 0 10px; font-weight: 800; letter-spacing: -0.035em;
+      }
+      p.sub {
+        margin: 0 0 22px; padding-bottom: 22px; color: var(--fg-dim); font-size: 14px; line-height: 1.7;
+        border-bottom: 3px solid var(--accent);
+      }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      a.card {
+        position: relative; display: block; padding: 24px 22px 22px;
+        border-radius: 4px; background: var(--surface);
+        color: var(--fg); text-decoration: none;
+        transition: background 0.15s ease;
+      }
+      a.card::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      a.card:hover, a.card:focus-visible {
+        background: var(--surface-2); outline: none;
+      }
+      a.card:hover::before, a.card:focus-visible::before { background: var(--accent); }
+      a.card strong { display: block; font-size: 21px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+      a.card span { display: block; font-size: 12.5px; color: var(--fg-dim); line-height: 1.6; }
+      a.card code {
+        display: inline-block; margin-top: 8px; font-size: 11px; color: var(--fg-mute);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      footer {
+        margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line);
+        font-size: 11.5px; color: var(--fg-mute);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="eyebrow">방송 콘솔</span>
+      <h1>Event Console</h1>
+      <p class="sub">현장 운영을 위한 로컬 행사 콘솔</p>
+      <p class="sub">조작 창은 노트북 화면에, 출력 창은 프로젝터 화면으로 옮긴 뒤 우하단 [전체화면] 또는 F 키를 누르세요.</p>
+      <div class="grid">
+        <a class="card" href="./control.html">
+          <strong>조작 패널</strong>
+          <span>씬 전환 · 점수 · 타이머 · 큐시트</span>
+          <code>control.html</code>
+        </a>
+        <a class="card" href="./display.html" target="_blank" rel="noopener">
+          <strong>출력 화면</strong>
+          <span>프로젝터 송출 · 1920×1080 (16:9)</span>
+          <code>display.html</code>
+        </a>
+      </div>
+      <footer>오프라인 전용 · 외부 네트워크 요청 없음 · 폰트 로컬 번들</footer>
+    </main>
+  </body>
+</html>

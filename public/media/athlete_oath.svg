@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">선수 선서 안내</title>
+  <desc id="desc">진행자의 선수 선서 안내를 기다리는 화면</desc>
+  <rect width="1920" height="1080" fill="#101827"/>
+  <circle cx="960" cy="300" r="76" fill="none" stroke="#d9b65d" stroke-width="4"/>
+  <path d="M930 300l22 22 42-48" fill="none" stroke="#d9b65d" stroke-width="10" stroke-linecap="square"/>
+  <text x="960" y="520" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="136" font-weight="800" letter-spacing="0">선수 선서</text>
+  <line x1="690" y1="584" x2="1230" y2="584" stroke="#d9b65d" stroke-width="3"/>
+  <text x="960" y="670" text-anchor="middle" fill="#cbd3df" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" letter-spacing="0">진행자의 안내를 기다려 주세요</text>
+  <text x="144" y="936" fill="#d9b65d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="700" letter-spacing="0">Event Console</text>
+</svg>

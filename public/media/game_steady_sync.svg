@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">몸으로 말해요 게임 안내</title>
+  <desc id="desc">몸으로 말해요 게임 시작 전 대기 화면</desc>
+  <rect width="1920" height="1080" fill="#0e1727"/>
+  <rect x="120" y="120" width="1680" height="840" fill="none" stroke="#33445c" stroke-width="2"/>
+  <circle cx="960" cy="258" r="34" fill="#d9b65d"/>
+  <path d="M960 300v92m0-58l-76 48m76-48l76 48m-76 8l-54 76m54-76l54 76" fill="none" stroke="#d9b65d" stroke-width="12" stroke-linecap="square"/>
+  <text x="960" y="532" text-anchor="middle" fill="#d9b65d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700" letter-spacing="0">GAME 04</text>
+  <text x="960" y="650" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="132" font-weight="800" letter-spacing="0">몸으로 말해요</text>
+  <text x="960" y="738" text-anchor="middle" fill="#cbd3df" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" letter-spacing="0">진행자의 안내를 기다려 주세요</text>
+  <text x="152" y="914" fill="#d9b65d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="700" letter-spacing="0">Event Console</text>
+</svg>

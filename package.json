@@ -1,0 +1,28 @@
+{
+  "name": "event-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Event Console — AI와 함께 행사와 장비에 맞게 수정하는 현장 운영 콘솔",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vfx-compositor/event-console.git"
+  },
+  "engines": { "node": ">=22.12.0" },
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run && npm run test:launcher",
+    "test:launcher": "node --test tests/launcher.test.mjs",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}

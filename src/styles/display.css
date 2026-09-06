@@ -1,0 +1,3913 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 출력 화면 (display.html) — 1920×1080 고정 스테이지를 레터박스 스케일.
+ *
+ * 레퍼런스: design/refs/broadcast/cap_01~25 (OBS 파리2024 · EPL · NBA/ESPN ·
+ * F1 타이밍타워 · LCK · KBO/KBS 한글 · 더 지니어스 상황판 · KBS 시상식 · YTN 속보).
+ *
+ * 지켜야 할 것 (design/BROADCAST_DESIGN_SYSTEM.md §2):
+ *  · 무채 베이스 + 액센트 1색. 팀 컬러는 4~6px 바·점에만, 면 채색·텍스트색 금지.
+ *  · 그라디언트 전면 채색 금지. 배경은 거의 검정 + 아주 옅은 비네트 한 겹.
+ *  · 라운드 ≤4px, 그림자 1단. 글로우·네온·다색 칩 금지.
+ *  · 숫자는 Barlow Condensed 볼드 tabular, 라벨은 Inter 소형 대문자,
+ *    한글은 Pretendard 볼드 자간 0.
+ *  · 하단 스코어바 120px(11%), 좌상 배지 인셋 32px — HUD 위치는 씬이 바뀌어도 고정.
+ *  · 점멸은 LIVE dot **하나만**. 타이머는 점멸 대신 색 전환.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.display-body {
+  background: #000;
+  overflow: hidden;
+}
+
+.display-body.cursor-hidden {
+  cursor: none;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+#stage {
+  /* flex 자식이라 기본 flex-shrink:1 이면 1920×1080 이 뷰포트 크기로 쪼그라들고,
+     그 위에 스케일까지 곱해져 화면이 훨씬 작게 나온다. 축소 금지가 필수. */
+  flex: 0 0 auto;
+  width: 1920px;
+  height: 1080px;
+  position: relative;
+  transform-origin: center center;
+  overflow: hidden;
+  background: var(--bg-void);
+}
+
+/* 2부 씬은 액센트 한 색만 레드로 갈아끼운다 (팔레트 구조는 그대로) */
+#stage[data-scene='breaking'],
+#stage[data-scene='suspects'],
+#stage[data-scene='submit'] {
+  --accent: #e23b3b;
+  --accent-soft: #f28d8d;
+  --accent-deep: #9c2723;
+  --accent-ink: #150605;
+  --accent-a12: rgba(226, 59, 59, 0.12);
+  --accent-a20: rgba(226, 59, 59, 0.2);
+  --accent-a40: rgba(226, 59, 59, 0.4);
+}
+
+#fs-btn {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
+  padding: 7px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: opacity 0.2s ease;
+}
+#fs-btn[hidden] {
+  display: none;
+}
+#fs-btn:hover,
+#fs-btn:focus-visible {
+  opacity: 1;
+}
+.cursor-hidden #fs-btn {
+  opacity: 0;
+}
+
+/* 창 모드 음소거 버튼 (U88) — 전체화면 버튼 바로 왼쪽, 같은 골격.
+ * 전체화면에서는 JS가 `hidden`으로 감춘다(누를 것이 없어야 한다). */
+#mute-btn {
+  position: fixed;
+  right: 104px;
+  bottom: 14px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: opacity 0.2s ease;
+}
+#mute-btn[hidden] {
+  display: none;
+}
+#mute-btn:hover,
+#mute-btn:focus-visible {
+  opacity: 1;
+}
+.cursor-hidden #mute-btn {
+  opacity: 0;
+}
+
+/* 꺼져 있는 동안에는 흐려지지 않는다 — "소리가 나가지 않는다"는 사실은 커서를 안 움직여도
+ * 보여야 한다. 색·형태·글자 세 신호를 함께 쓴다(라벨은 `userMuteLabel`). */
+#mute-btn.is-muted,
+.cursor-hidden #mute-btn.is-muted {
+  opacity: 1;
+  border-color: rgba(226, 59, 59, 0.5);
+  background: rgba(38, 8, 8, 0.82);
+  color: #ffd7d7;
+}
+.mute-btn__label {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.mute-btn__hint {
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+.mute-btn__hint[hidden] {
+  display: none;
+}
+
+.display-scale-badge {
+  position: fixed;
+  left: 50%;
+  top: 22px;
+  z-index: 60;
+  transform: translateX(-50%);
+  padding: 9px 15px 8px;
+  border-radius: var(--rp);
+  background: rgba(8, 12, 20, 0.9);
+  box-shadow: inset 0 0 0 1px var(--accent-a40), 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: var(--accent);
+  font-family: var(--font-num);
+  font-size: 14px;
+}
+.display-scale-badge[hidden] {
+  display: none;
+}
+
+/* 씬 인 — 페이드 + 미세 스케일(1.0→1.005). 바운스·탄성 금지. */
+.scene {
+  position: absolute;
+  inset: 0;
+  animation: scene-in var(--dur-in) var(--ease-out) both;
+}
+
+@keyframes scene-in {
+  from {
+    opacity: 0;
+    transform: scale(1.006);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 풀스크린 정보 씬의 지면 — 색이 아니라 밝기로만 깊이를 준다(비네트 한 겹). */
+.scene--score,
+.scene--roster,
+.scene--award,
+.scene--timer,
+.scene--prompt,
+.scene--suspects,
+.scene--submit {
+  background:
+    radial-gradient(140% 100% at 50% 0%, rgba(255, 255, 255, 0.035), transparent 58%),
+    var(--bg);
+}
+
+/* 자동재생 정책으로 소리가 막혔을 때만 뜨는 안내 배지 */
+.audio-unlock {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 18px;
+  border-radius: var(--r-sm);
+  background: var(--scrim-strong);
+  border: 1px solid var(--accent-a40);
+  color: var(--fg);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.audio-unlock[hidden] {
+  display: none;
+}
+
+/* ════════════════════════════════════════════════════════ 씬 전환 스팅어
+ * 액센트 슬래브가 화면을 훑고, 덮은 순간 씬을 갈아끼운다.
+ * 방향은 세션 내내 좌→우 하나로 고정 (§2-⑤ "방향 섞지 않기").
+ */
+
+/* 배경 앰비언트 레이어 — 스테이지와 같은 기하로 겹쳐 screen 합성.
+   씬 렌더가 stage.innerHTML을 갈아치우므로 #viewport 자식으로 둔다 (transition.ts와 같은 이유).
+   z-index 5 = 스테이지 위, 전환 오버레이(#fx, 40) 아래. */
+#ambient {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: center center;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: screen;
+}
+
+#fx {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+  opacity: 0;
+}
+
+/* 프리렌더 영상 전환 — stage 재렌더와 독립된 persistent overlay. */
+#transition-video,
+#overlay-video {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  transform-origin: center center;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 45;
+  background: transparent;
+}
+
+#overlay-video {
+  z-index: 43;
+}
+/* 분위기 반전 앞 15초의 **흰 자막**을 글리치 위로 띄운다 (U77).
+
+   U53에서는 이 자리에서 영상을 글리치(42) 아래(41)로 내렸다 — 영상 앞 15초가 검정이라
+   그대로 두면 그 검정 한 장이 글리치를 통째로 가리기 때문이다. 그런데 그 검정 위에는
+   도입부 자막이 얹혀 있었고, 층을 내리자 자막까지 함께 묻혀 한 글자도 나오지 않았다.
+
+   층 대신 **합성**을 바꾼다. `screen`은 검정을 항등원으로 두므로(`screen(x, 0) = x`)
+   영상의 검정 배경은 아무것도 덮지 않고 흰 자막만 타 오른다. 그래서 영상은 평소 자리(43,
+   글리치 위)에 그대로 있고 글리치도 계속 보인다.
+
+   `crossfade`에서 클래스가 떨어져 `normal`로 돌아온다 — 그때는 영상이 화면의 주인이라
+   검정도 그려져야 한다. 남겨 두면 영상의 어두운 부분이 통째로 투명해진다.
+   합성이 걸리는 엘리먼트는 이것 하나뿐이다. 카메라(.cam-video)·씬에는 걸지 않는다. */
+#overlay-video.is-mood-caption {
+  mix-blend-mode: screen;
+}
+
+#transition-video[hidden],
+#overlay-video[hidden] {
+  display: none;
+}
+
+/* 설명 영상(full) 검정 페이드 레이어 (§4-1).
+   z-order 근거: #ambient(5) < #fx(40) < #fade-black(44) < #transition-video(45) < #fs-btn(50) < .audio-unlock(60).
+   - #fx·#ambient 위여야 페이드가 화면 전체를 덮는다.
+   - #transition-video 아래에 둔다 — 둘이 동시에 뜨는 정상 경로는 없지만(설명 영상은 scene/set을
+     내지 않아 스팅어 래핑을 구조적으로 타지 않는다), 만에 하나 겹치면 스팅어가 검정 위에 보이는
+     쪽이 화면이 죽는 것보다 낫다.
+   stage가 아니라 #viewport 자식이다 — stage.innerHTML이 통째로 갈리기 때문(#ambient·#fx와 같은 이유).
+   --scale 변환은 걸지 않는다: 검정은 레터박스 바깥까지 덮는 것이 자연스럽다.
+   opacity는 display.ts의 rAF가 매 프레임 직접 쓴다 — CSS transition을 걸면 두 곡선이 갈라진다. */
+#fade-black {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 44;
+}
+
+#scene-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 46;
+}
+
+/* 운영자 암전 (U65).
+   z-order 근거: #fade-black(44) < #transition-video(45) < #scene-fade(46) < #blackout(47)
+   < #fs-btn(50) < .audio-unlock(60).
+   - 스팅어·씬 페이드보다 위여야 암전이 진짜 검정이다. 아래에 두면 전환이 도는 동안 걷혀 보인다.
+   - 운영 크롬(전체화면·오디오 잠금 해제)보다는 아래다 — 화면을 껐다고 출력 창을 되살릴
+     손잡이까지 덮으면 복구할 방법이 사라진다.
+   --scale 변환은 걸지 않는다: 검정은 레터박스 바깥까지 덮는 것이 자연스럽다(#fade-black과 같다).
+   opacity는 display.ts의 rAF가 매 프레임 직접 쓴다 — CSS transition을 걸면 두 곡선이 갈라진다. */
+#blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 47;
+}
+
+/* 고스트 테일 보관함 (U27 D5).
+ *
+ * 씬이 갈릴 때 `<video>`가 문서에서 **떨어져 나가면 브라우저가 알아서 pause** 한다(HTML 명세).
+ * 그러면 소리는 하드 컷이 되고 볼륨 램프는 멈춘 엘리먼트 위에서 헛돈다. 페이드가 끝날 때까지
+ * 문서에 남겨 두기 위한 자리다.
+ *
+ * `display: none`이 아니라 `visibility: hidden` + 1px인 이유: 소리는 계속 나가야 하고,
+ * 레이아웃에는 영향을 주지 않아야 한다. 화면에는 아무것도 보이지 않는다. */
+#media-tail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* 분위기 반전 오버레이 (U26).
+ *
+ * **이 블록이 통째로 빠진 채 배포된 적이 있다** — JS는 `#mood-transition`을 만들어 붙이는데
+ * 대응 CSS가 없어 position static · 0×0 · 화면 밖이었고, 글리치가 아무것도 보이지 않았다.
+ * `display.ts`가 만드는 id/class는 여기 규칙이 있어야 한다(그 스캔 테스트가 이 사고를 잠근다).
+ *
+ * z-order 근거: #fx(40) < #mood-transition(42) < #overlay-video(43) < #fade-black(44).
+ *  - 씬과 씬 스윕 위여야 글리치가 화면을 덮는다.
+ *  - 오버레이 영상 **아래**여야 반전 영상이 검정 위로 올라온다 — 암전이 영상을 가리면 안 된다.
+ *  - `#fade-black`(설명 영상 전용)과는 소유자가 다르다. 하나를 둘이 쓰면 한쪽 페이드가
+ *    다른 쪽 상태 머신에 끌려간다. */
+#mood-transition {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 42;
+  overflow: hidden;
+}
+
+#mood-transition[hidden] {
+  display: none;
+}
+
+/* 캔버스는 **스테이지와 정확히 같은 사각형**을 차지한다 (U26b).
+ *
+ * 뷰포트 전체를 덮게 두면 창 비율이 16:9가 아닐 때 라이브 화면과 크기가 어긋나, 넘어가는
+ * 순간 그림이 튄다. `#transition-video`와 같은 기하(1920×1080 · --scale)를 쓴다.
+ * 내부 해상도는 480×270이고 여기서 늘려 그린다 — 픽셀 정렬이 CPU에서 돌기 때문이다. */
+/* 검정이 다 덮은 뒤(=crossfade)에 0.3초로 걷힌다 — 그 시점엔 이미 아무것도 안 보이므로
+   화면에는 변화가 없고, 캔버스를 즉시 떼어 생기는 마지막 프레임 깜빡임만 막는다 (U53). */
+.mood-transition__glitch {
+  transition: opacity 0.3s linear;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  transform-origin: center center;
+  display: block;
+}
+
+/* 진입 디졸브(U91)가 도는 0.6초 동안만 붙는다.
+ *
+ * 들어올 때의 불투명도는 display의 rAF가 `moodGlitchOpacity`로 매 프레임 직접 쓴다. 그 위에
+ * 위 규칙의 0.3초 transition이 겹치면 브라우저가 매 프레임 새 보간을 시작해 실제 화면이
+ * 곡선을 한참 뒤따라가고, 순수 함수가 정본이라는 계약이 깨진다(`.mood-transition__black`이
+ * transition을 아예 쓰지 않는 것과 같은 이유). 나갈 때의 페이드는 값 한 번으로 끝나므로
+ * 그때는 위 규칙이 그대로 필요하다 — 그래서 끄는 것이 아니라 램프 구간만 덮어쓴다. */
+.mood-transition__glitch.is-mood-fade-in {
+  transition: none;
+}
+
+/* 암전. opacity만 움직이므로 합성 레이어 하나로 끝난다(레이아웃·페인트 0).
+ * 불투명도는 display의 rAF가 매 프레임 직접 쓴다 (U26b) — CSS transition을 걸면 디스토션
+ * 붕괴 곡선과 검정 곡선이 갈라져 "무너지는 동안 덮인다"는 겹침이 어긋난다.
+ * (`#fade-black`이 같은 이유로 transition을 쓰지 않는 것과 같다.) */
+.mood-transition__black {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  will-change: opacity;
+}
+#fx.is-on {
+  opacity: 1;
+}
+
+/* 덮개 — 단색 딥네이비 슬래브. 앞선 모서리에만 액센트 밴드. */
+.fx__panel {
+  position: absolute;
+  top: -12%;
+  left: 0;
+  width: 150%;
+  height: 124%;
+  background: var(--bg-void);
+  transform: translateX(-200%) skewX(-15deg);
+}
+.fx__panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -104px;
+  width: 104px;
+  background: var(--accent);
+  box-shadow: -1px 0 0 rgba(255, 255, 255, 0.35);
+}
+
+/* 슬래브보다 한 발 앞서 지나가는 얇은 라이트 스트릭 */
+.fx__streak {
+  position: absolute;
+  top: -12%;
+  left: 0;
+  width: 18%;
+  height: 124%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-a40) 46%,
+    rgba(255, 255, 255, 0.5) 58%,
+    transparent
+  );
+  transform: translateX(-170%) skewX(-15deg);
+}
+
+.fx__emblem {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  opacity: 0;
+}
+.fx__emblem .emblem {
+  color: var(--accent);
+}
+
+.fx__spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  opacity: 0;
+}
+
+#fx[data-mode='red'] {
+  --accent: #e23b3b;
+  --accent-soft: #f28d8d;
+  --accent-a40: rgba(226, 59, 59, 0.4);
+}
+
+/* 2부 진입 한정 — 스캔라인 한 겹 (1부 전환에는 붙지 않는다) */
+.fx__glitch {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(226, 59, 59, 0.16) 0 2px,
+    transparent 2px 5px
+  );
+}
+#fx[data-mode='red'] .fx__emblem {
+  animation: fx-jitter 0.16s steps(2) 5;
+}
+
+@keyframes fx-jitter {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: drop-shadow(4px 0 0 rgba(226, 59, 59, 0.85))
+      drop-shadow(-4px 0 0 rgba(59, 130, 226, 0.55));
+  }
+}
+
+/* ════════════════════════════════════════════════════════ S1 기본 대기 화면
+ * 사전미션은 제공 이미지 한 장, 일반 대기는 제공 영상을 그대로 표시한다.
+ */
+
+.scene--standby-video,
+.scene--standby-image-only,
+.scene--game-steady {
+  padding: 0;
+  background: #000;
+}
+
+/* ── 선수 선서 (U60)
+ * 사전미션과 같은 "이미지 한 장" 화면이되, 파일이 아직 없을 때 **검정이 나가면 안 된다**.
+ * 타이포 카드를 이미지 **뒤에** 항상 깔아 두고, 이미지가 로드되면 그것이 덮는다.
+ * `onerror`가 붙이는 `is-missing`은 깨진 이미지 아이콘까지 확실히 지우는 두 번째 방어다
+ * (인라인 핸들러가 막히는 환경에서도 뒤에 깔린 카드는 그대로 보인다).
+ * 진입 모션은 opacity/transform만 쓰고 keyframe에 `to` 블록을 두지 않는다(§3 계약). */
+.scene--oath {
+  display: grid;
+  place-items: stretch;
+}
+
+.oath-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #11101a 0%, #08080d 72%);
+}
+
+/* `z-index: 1`은 U97/U98과 같은 계약이다 — 이 규칙의 첫 주석이 "이미지가 로드되면 그것이
+ * 덮는다"라고 적어 두었지만, z가 `auto`면 뒤에 오는 `.oath-fallback`(z 0)이 트리 순서로
+ * 이겨 실제로는 카드가 사진 위에 얹혔다. 2부 대기화면에서 같은 사고가 드러나(U98) 함께 고쳤다. */
+.oath-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.oath-frame.is-missing .oath-image {
+  display: none;
+}
+
+.oath-fallback {
+  position: relative;
+  z-index: 0;
+  text-align: center;
+  animation: oath-card-in 460ms var(--ease-out) both;
+}
+
+/* ⚠️ `--font-serif`/`--font-sans`는 **토큰에 없는 이름이었다** (U79 실사고).
+ * `font:` 단축 속성 안의 var()가 해석되지 않으면 CSS는 그 선언 하나를 통째로 버린다
+ * (invalid at computed-value time) — 굵기·크기·행간까지 같이 날아가, 132px여야 할 제목이
+ * 브라우저 기본 16px로 나왔다. 프로젝터에서 "1920×1080 한가운데 깨알 카드"로 보인 원인이다.
+ * 정본은 `styles/tokens.css`의 `--font`(본문/제목) · `--font-label`(영문 대문자 라벨) ·
+ * `--font-num`(컨덴스드 숫자) 셋뿐이다. 새 이름을 지어 쓰지 말 것. */
+.oath-fallback__title {
+  color: #fff;
+  font: 900 132px/1.06 var(--font);
+  letter-spacing: -0.045em;
+  text-shadow: 0 14px 42px rgba(0, 0, 0, 0.48);
+}
+
+.oath-fallback__rule {
+  width: 120px;
+  height: 5px;
+  margin: 38px auto;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 28px rgba(215, 176, 78, 0.45);
+}
+
+/* 자간은 넓히지 않는다(전역 UI 규칙) — 한글이 섞이는 화면에서 양수 자간은 금방 엉성해진다. */
+.oath-fallback__edition {
+  color: var(--accent);
+  font: 700 36px/1.2 var(--font-label);
+  letter-spacing: 0;
+}
+
+@keyframes oath-card-in {
+  from { opacity: 0; transform: translateY(20px); }
+}
+
+[data-scene]:not([data-scene-enter]) .oath-fallback {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oath-fallback { animation: none; }
+}
+
+/* ── 2부 단계 대기 화면 (U97)
+ * 어두운 취조 책상 그림 한 장 위에 **꺼져 가는 스탠드 조명**을 얹는다.
+ * 사용자 원문: "그냥 떠 있으면 재미없으니까. 약한 플리커를 넣어줘. 그레인도 넣으면 좋고."
+ *
+ * 두 레이어의 역할이 다르다:
+ *  - `.p2-steady__flicker` — **불이 켜진 쪽**이다. 그림 전체를 담고 있고, 불투명도만
+ *    `scenes/submit.ts`의 `p2FlickerOpacity()`가 매 프레임 심는다(항상 0.85~1).
+ *    검은 덮개를 씌우는 방식이 아닌 이유는 그 함수 주석에 있다.
+ *  - `.p2-steady__grain` — 정지 노이즈 타일을 `steps()` transform으로만 흔든다.
+ *    사진 씬 그레인(`.photo-stage.is-grain::after`)과 **같은 방식·같은 keyframe**이라
+ *    프레임당 `filter` 비용이 0이다. 세기만 한 단계 굵다(`[data-grain='p2']`).
+ */
+.scene--p2-steady {
+  padding: 0;
+  background: #000;
+}
+
+.p2-steady {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* 플리커가 내려간 만큼 비쳐 나오는 지면. 순검정보다 아주 살짝 푸른 쪽이 램프 그림자로 읽힌다. */
+  background: #05050a;
+}
+
+.p2-steady__flicker {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* tick이 인라인으로 덮기 전 첫 프레임의 초기값 */
+  opacity: 1;
+  will-change: opacity;
+}
+
+/**
+ * ⚠️ `z-index: 1`이 계약이다 (U98 실사고).
+ *
+ * 사용자 지시(03:18) — "아니 타이틀 왜 박았어. 저기선 이미지만 뜨면 돼."
+ * 폴백 카드는 이미지 **뒤에** 깔아 두는 것이 설계였는데(U60 선서 화면과 같은 장치),
+ * 실제로는 카드가 사진 위에 얹혀 `2부 / N단계` 타이포가 그대로 나갔다.
+ *
+ * 원인은 CSS 페인팅 순서다. 두 요소 다 positioned이고 z-index가 `auto`(이미지)와 `0`(카드)이면
+ * **같은 단계에서 트리 순서대로** 칠해진다 — 뒤에 오는 카드가 이긴다. "뒤에 깔았다"는 것은
+ * DOM 순서일 뿐 페인트 순서가 아니었다. 이미지에 양수 z를 주어야 실제로 덮는다.
+ *
+ * 이 층 관계가 폴백을 **onerror 전용**으로 만드는 장치이기도 하다: 그림이 1920×1080 `cover`로
+ * 불투명하게 덮으므로 로드되면 카드는 한 픽셀도 보이지 않고, 파일이 없으면 `is-missing`이
+ * 이미지를 지워 카드가 그 자리에 드러난다(핸들러가 막혀도 깨진 img는 투명이라 비친다).
+ */
+.p2-steady__image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.p2-steady.is-missing .p2-steady__image {
+  display: none;
+}
+
+/* 이미지 **뒤에** 항상 깔려 있다 — 파일이 없어도 검정이 나가지 않는다 (선서 화면 U60과 같은 장치) */
+.p2-steady__fallback {
+  position: relative;
+  z-index: 0;
+  text-align: center;
+}
+
+/* 자간은 넓히지 않는다(전역 UI 규칙). 토큰에 없는 폰트 이름을 지어 쓰지 않는다(U79 사고). */
+.p2-steady__fallback-eyebrow {
+  color: var(--accent);
+  font: 700 34px/1.2 var(--font-label);
+  letter-spacing: 0;
+}
+
+.p2-steady__fallback-title {
+  margin-top: 14px;
+  color: #fff;
+  font: 900 132px/1.06 var(--font);
+  letter-spacing: -0.045em;
+  text-shadow: 0 14px 42px rgba(0, 0, 0, 0.48);
+}
+
+.p2-steady__fallback-rule {
+  width: 120px;
+  height: 5px;
+  margin: 34px auto 0;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 28px rgba(215, 176, 78, 0.45);
+}
+
+.p2-steady__grain {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: normal;
+  animation: photo-grain 0.28s steps(2, end) infinite;
+}
+
+/* 이 화면만 한 단계 굵은 결. 사진 배경(0.12)보다 위이되 얼굴을 지우지 않는 선. */
+.scene--p2-steady[data-grain='p2'] .p2-steady__grain {
+  opacity: 0.17;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 인라인 opacity를 이겨야 실제로 멈춘다 — tick이 매 프레임 쓰는 값이기 때문. */
+  .p2-steady__flicker {
+    opacity: 1 !important;
+  }
+
+  .p2-steady__grain {
+    animation: none;
+  }
+}
+
+/* 게임 대기(`.game-steady-image`)는 사전미션과 같은 "이미지 한 장" 기하다 — 종목만 다르다 (U29). */
+.pre-mission-image,
+.game-steady-image,
+.main-standby-video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 대기 화면은 "완성된 그림" 두 덩어리로 겹쳐 있고, display는 위 덩어리의 opacity 하나만
+ * 움직인다 (U19). 영상·사진을 각자 페이드시키면 중간에 검정이 새어 나와 밝기가 푹 꺼진다 —
+ * `standbyBackdropLayers` 주석 참조. 여기 값은 display의 첫 프레임 전 한 틱을 덮는 초기값이다. */
+.standby-stack {
+  position: absolute;
+  inset: 0;
+  will-change: opacity;
+}
+
+.standby-stack--off {
+  z-index: 1;
+  opacity: 1;
+}
+
+/* **검정 지면이 계약이다.** 이게 있어야 ON 스택이 opacity 1에서 아래 스택을 완전히 덮고,
+ * 알파 영상의 투명한 구멍으로 사진과 검정이 비치는 최종 그림이 스택 안에서 먼저 완성된다.
+ * 지우면 켠 상태에서 구멍 너머로 밝은 영상이 비쳐 그림이 통째로 달라진다. */
+.standby-stack--on {
+  z-index: 2;
+  background: #000;
+  opacity: 0;
+}
+
+.main-standby-video {
+  z-index: 1;
+}
+
+.scene--standby-video .photo-backdrop {
+  z-index: 0;
+}
+
+/* 우상단 시계 — KBS/OBS의 코너 칩 */
+.wall-clock {
+  position: absolute;
+  top: var(--inset-badge);
+  right: var(--inset-badge);
+  font-family: var(--font-num);
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1;
+  padding: 12px 18px 10px;
+  color: var(--fg-soft);
+  background: var(--scrim);
+  border-left: 3px solid var(--accent);
+}
+
+/* ════════════════════════════════════════════════════════ S3 라이브캠
+ * HUD 위치 고정: 좌상 종목배지 / 우상 클록 / 하단 풀와이드 스코어바.
+ */
+
+.scene--live {
+  background: #000;
+}
+
+.cam-slot {
+  position: absolute;
+  inset: 0;
+}
+.cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+/* NO SIGNAL — SMPTE 컬러바 (외부 이미지 없이 CSS만) */
+.nosignal {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+.nosignal__bars {
+  position: absolute;
+  inset: 0 0 34% 0;
+  display: flex;
+}
+.nosignal__bars span {
+  flex: 1;
+}
+.nosignal__msg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #0a0a0a;
+}
+.nosignal__msg strong {
+  font-family: var(--font-num);
+  font-size: 94px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #fff;
+}
+.nosignal__msg span {
+  font-size: 22px;
+  color: var(--fg-dim);
+}
+
+/* PGM 모니터의 카메라 자리 (U72).
+   컬러바를 쓰지 않는다 — NO SIGNAL과 같은 그림이면 "출력이 죽었다"로 읽히는데, 실제로는
+   출력 창이 멀쩡히 카메라를 잡고 있는 정상 상태다. 화면 전체를 채우는 조용한 안내로 둔다. */
+.nosignal--monitor {
+  display: grid;
+  place-items: center;
+  background: #08090c;
+}
+.nosignal--monitor .nosignal__msg {
+  position: static;
+  height: auto;
+  gap: 18px;
+  background: transparent;
+}
+.nosignal--monitor .nosignal__msg strong {
+  font-family: inherit;
+  font-size: 64px;
+  color: var(--fg-dim);
+}
+
+/* 대결 팀 좌우 컬러 보더 — 얇은 세로 바(면 채색 아님) */
+.vs-borders {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+.vs-borders--neutral {
+  display: none;
+}
+.vs-borders__l,
+.vs-borders__r {
+  position: absolute;
+  top: 0;
+  bottom: var(--scorebar-h);
+  width: 18px;
+  background: var(--team-color);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--team-color) 78%, transparent);
+}
+.vs-borders__l::after,
+.vs-borders__r::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 46px;
+  opacity: 0.42;
+}
+.vs-borders__l {
+  left: 0;
+}
+.vs-borders__l::after {
+  left: 100%;
+  background: linear-gradient(90deg, var(--team-color), transparent);
+}
+.vs-borders__r {
+  right: 0;
+}
+.vs-borders__r::after {
+  right: 100%;
+  background: linear-gradient(270deg, var(--team-color), transparent);
+}
+
+/* 대결 팀 아이콘 바 (U21 · U25 Luxe) — 상단 가운데.
+ * 좌상 종목 배지(--inset-badge)와 우상 타이머 사이의 빈 폭만 쓰고,
+ * 카메라 인물이 서는 화면 중앙·하단은 비운다. 좌·우 순서는 컬러 보더와 같다.
+ * 높이 68 → 116px (U32 "VS 더 크게"). 면은 luxe 패널 캡슐, 팀 식별은 아바타 링.
+ *
+ * 커지는 것은 **세로뿐**이다. 가로는 max-width 900px 그대로라 발자국이 중앙 세이프존
+ * 510~1410px 안에 머물고, 좌상 종목 배지·우상 타이머와 가로로 겹치지 않는다.
+ * 카메라 인물이 서는 화면 중앙·하단은 손대지 않으므로 가림은 이 상단 바 하나로 끝난다. */
+.vs-teams {
+  position: absolute;
+  top: var(--inset-badge);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 13;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 900px;
+  /* 로고 96px + 위아래 12px (하단 스코어바와 같은 인셋). U25 예산 상한 120px 이내. */
+  height: 120px;
+  padding: 0 16px;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 999px;
+  background: var(--luxe-panel);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.vs-teams__side {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.vs-teams__side--r {
+  flex-direction: row-reverse;
+}
+/* 팀 색은 링에만 — 면 채색 금지 */
+.vs-teams__logo,
+.vs-teams__badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* U37: 84 → 96px. 하단 스코어바 아바타와 같은 급이라 두 크롬이 따로 놀지 않는다. */
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border: 5px solid color-mix(in srgb, var(--team-color) 70%, #fff);
+  border-radius: 50%;
+  background: var(--luxe-avatar-bg);
+  object-fit: contain;
+}
+/* 오피셜 팀 배지는 자기 rim이 있어 링을 hairline으로 — 자세한 이유는 .team-badge 주석 참조 */
+.vs-teams__logo.team-badge {
+  border-width: 2px;
+  background: transparent;
+}
+.vs-teams__badge {
+  color: var(--luxe-capsule-num);
+  font-family: var(--font-num);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+/* 최대폭 300 → 240 → 232px. 글자가 38px로 커지고 로고가 96px(U37)로 커진 만큼
+   좌우 두 팀 + VS 캡슐이 900px 안에 그대로 들어가야 한다 — 넘치면 이름이 잘리는 게
+   아니라 바가 세이프존을 벗어난다. */
+.vs-teams__name {
+  max-width: 232px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+/* VS — 리더보드 순위 pill(.sb__rank)과 같은 급의 보라 캡슐. 그라디언트·그림자 토큰을 공유한다. */
+.vs-teams__vs {
+  flex: none;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: var(--luxe-pill-grad);
+  box-shadow: var(--luxe-pill-shadow);
+  color: #fff;
+  font-family: var(--font-num);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* ── 오버레이 슬롯 (U68) ────────────────────────────────────────────────
+ * 중계 오버레이는 켜고 끌 때 **사라졌다 나타나지** 않고 제자리에서 스민다.
+ *
+ * 슬롯은 스테이지를 통째로 덮는 투명 상자다. 안에 든 배지·바가 전부 절대 배치라, 감싸는
+ * 상자가 같은 기하(`inset: 0`)를 가져야 좌표가 그대로다. `position: absolute`를 항상 두는
+ * 이유이기도 하다 — transform이 붙고 떨어질 때마다 절대 배치의 기준 상자가 바뀌면 자식이 튄다.
+ *
+ * 움직이는 것은 **opacity와 transform뿐**이다(합성 전용). 방향은 화면에서 그 요소가 사는
+ * 자리를 따른다 — 하단 스코어바는 아래에서, 상단 배지·타이머·대결은 위에서. */
+.ov-slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.28s var(--ease-out), transform 0.28s var(--ease-out);
+}
+.ov-slot.is-off {
+  opacity: 0;
+  pointer-events: none;
+}
+/* 상단에 사는 것들은 위로 물러난다 */
+.ov-slot--badge.is-off,
+.ov-slot--timer.is-off,
+.ov-slot--versus.is-off {
+  transform: translateY(-8px);
+}
+/* 하단 스코어바는 아래로 물러난다 */
+.ov-slot--scorebar.is-off {
+  transform: translateY(8px);
+}
+/* 대결 아이콘 줄만 자기 z(13)를 슬롯으로 끌어올린다 — 페이드 중 opacity가 쌓임 맥락을
+   만들면 자식의 z-index가 슬롯 안쪽으로 갇혀 컬러 보더(12) 아래로 내려가기 때문이다. */
+.ov-slot--versus {
+  z-index: 13;
+}
+/* 움직임을 줄이는 설정에서는 밀려나는 8px만 없앤다 — 페이드는 남긴다.
+   (즉시 사라지면 "지금 껐다"는 사실 자체가 화면에서 읽히지 않는다.) */
+@media (prefers-reduced-motion: reduce) {
+  .ov-slot--badge.is-off,
+  .ov-slot--timer.is-off,
+  .ov-slot--versus.is-off,
+  .ov-slot--scorebar.is-off {
+    transform: none;
+  }
+}
+
+/* 오버레이 인 — 방향은 각자 고정(좌상은 좌에서, 우상은 우에서, 하단은 아래에서) */
+.scene--live .vs-teams {
+  animation: ov-down var(--dur-in) var(--ease-out) both;
+}
+@keyframes ov-down {
+  from {
+    transform: translate(-50%, -24px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+.scene--live .event-badge {
+  animation: ov-left var(--dur-in) var(--ease-out) both;
+}
+.scene--live .timer-badge {
+  animation: ov-right var(--dur-in) var(--ease-out) both;
+}
+.scene--live .scorebar {
+  animation: ov-up var(--dur-in) var(--ease-out) both;
+}
+
+@keyframes ov-left {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+}
+@keyframes ov-right {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes ov-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* ── 좌상 종목 배지 + LIVE (cap_09 EPL 스코어버그 · cap_10 ESPN 문법) ── */
+
+.event-badge {
+  position: absolute;
+  top: var(--inset-badge);
+  left: var(--inset-badge);
+  display: flex;
+  align-items: stretch;
+  height: 56px;
+  overflow: hidden;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 999px;
+  background: var(--luxe-panel);
+  box-shadow: var(--shadow);
+}
+
+.event-badge__live {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  /* 캡슐 좌측 곡률 안쪽에서 LIVE 점이 시작하도록 왼쪽만 더 준다 */
+  padding: 0 16px 0 15px;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--font-label);
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+/* 화면에서 유일하게 점멸이 허용되는 요소 */
+.event-badge__live::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  animation: live-blink 1.2s linear infinite;
+}
+
+@keyframes live-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.18;
+  }
+}
+
+/* 종목명이 길어도 배지가 중앙 대결 아이콘 바(.vs-teams, 최대 900px)까지 뻗지 않게 자른다 */
+.event-badge__name {
+  /* flex 자식 텍스트에는 말줄임이 걸리지 않는다 — 블록으로 두고 행높이로 수직 정렬한다.
+   * 배지 56px에서 테두리 1px 두 겹을 뺀 내부 높이가 54px다. */
+  display: block;
+  line-height: 54px;
+  max-width: 420px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 0 24px 0 22px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+/* ── 우상 러닝 클록 (cap_01 OBS 클록) ── */
+
+/* 숫자 급수·굵기·색은 그대로 둔다 — 현장 가독성이 이 배지의 유일한 일이다.
+ * 면만 luxe 캡슐로 바꾸고, 액센트는 좌측 4px 선 대신 캡슐 안쪽 링으로 돈다. */
+.timer-badge {
+  position: absolute;
+  top: var(--inset-badge);
+  right: var(--inset-badge);
+  min-width: 230px;
+  /* 좌우 25 + 테두리 1 = U25 이전의 좌우 패딩 26. 가로 차지폭이 늘지 않는다. */
+  padding: 12px 25px 10px;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 999px;
+  background: var(--luxe-panel);
+  box-shadow: inset 4px 0 0 var(--accent), var(--shadow);
+  text-align: right;
+  transition: box-shadow 1s ease, background 1s ease;
+}
+
+.timer-badge__time {
+  display: block;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 72px;
+  line-height: 0.92;
+  letter-spacing: 0;
+  color: var(--fg);
+  transition: color 1s ease;
+}
+
+/* 임계치 — 점멸이 아니라 색으로 알린다 (§3.2 "점멸 금지") */
+.timer-badge.is-danger {
+  box-shadow: inset 4px 0 0 var(--danger), var(--shadow);
+}
+.timer-badge.is-danger .timer-badge__time {
+  color: var(--danger-soft);
+}
+
+/* ── 하단 스코어바 (§3.2: 높이 120px, 풀와이드, 6슬롯 균등 · U25 Luxe) ──
+ * 카메라를 가리는 면적은 그대로다 — 높이 `--scorebar-h`와 풀와이드를 유지한다.
+ * 바뀐 것은 면(루체 패널)과 팀 식별 방식(좌측 컬러 바 → 아바타 링)뿐이다. */
+
+.scorebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--scorebar-h);
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), 1fr);
+  background: var(--luxe-panel);
+  box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.5);
+}
+/* 상단 1px 액센트 라인 — 방송 스코어바의 서명 */
+.scorebar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--accent);
+}
+
+.scorebar__team {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 26px 0 22px;
+  min-width: 0;
+}
+/* 슬롯 구분선 */
+.scorebar__team + .scorebar__team::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  /* 아바타(96px)가 12px 인셋에 앉으므로 구분선도 같은 인셋에서 끝난다 */
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--luxe-panel-line);
+}
+
+/* 팀 식별 — 아바타 링. 팀 컬러가 쓰이는 유일한 자리이고 다른 씬과 같은 신호다.
+   U37: 62 → 96px. 바 높이(120px)에서 위아래 12px씩만 남기는 최대치이고, 상단 VS 바
+   로고와 같은 급이다 — 카메라 가림 면적은 바 높이가 정하므로 늘지 않는다.
+
+   **`.scorebar`를 앞에 붙이는 것이 계약이다.** 공용 `.luxe-avatar`(86px)가 이 파일 뒤쪽에
+   있어서 같은 특정도(0,1,0)로는 순서만으로 그쪽이 이긴다 — 실측에서 96이 아니라 86으로
+   잡혔다. 배지 변형(`:has(.team-badge)`)은 링 두께만 2px로 낮추고 상자는 96을 유지한다. */
+.scorebar .scorebar__avatar {
+  width: 96px;
+  height: 96px;
+  border-width: 6px;
+}
+.scorebar .scorebar__avatar:has(.team-badge) {
+  width: 96px;
+  height: 96px;
+  border-width: 2px;
+}
+/* 로고 px는 여기 없다 — 공용 `.luxe-logo`가 아바타 상자의 100%다 (U79). */
+.scorebar .scorebar__avatar .luxe-logo-fallback {
+  font-size: 26px;
+}
+
+.scorebar__name {
+  flex: 1;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.scorebar__score {
+  flex: none;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: var(--fs-score);
+  line-height: 1;
+  color: var(--fg);
+}
+
+/* 직전 획득 — 스코어 위로 떠오르는 액센트 숫자 */
+.scorebar__gain {
+  position: absolute;
+  right: 26px;
+  bottom: calc(100% - 30px);
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+}
+.scorebar__gain.is-on {
+  animation: gain-float 2.4s var(--ease-out) forwards;
+}
+
+@keyframes gain-float {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+}
+
+/* 5~6팀 — 슬롯이 좁아지면 정보 밀도를 유지한 채 급수만 낮춘다 */
+.scorebar[data-teams='5'] .scorebar__name {
+  font-size: 26px;
+  min-width: 3.2em; /* 팀명이 아바타·점수에 밀려 완전히 사라지지 않게 */
+}
+.scorebar[data-teams='5'] .scorebar__score {
+  font-size: 40px;
+}
+.scorebar[data-teams='5'] .scorebar__avatar,
+.scorebar[data-teams='5'] .scorebar__avatar:has(.team-badge) {
+  width: 76px;
+  height: 76px;
+}
+.scorebar[data-teams='5'] .scorebar__avatar {
+  border-width: 5px;
+}
+.scorebar[data-teams='5'] .scorebar__team {
+  gap: 12px;
+  padding-right: 20px;
+}
+.scorebar[data-teams='6'] .scorebar__name {
+  font-size: 22px;
+  min-width: 3.2em;
+}
+.scorebar[data-teams='6'] .scorebar__score {
+  font-size: 34px;
+}
+.scorebar[data-teams='6'] .scorebar__avatar,
+.scorebar[data-teams='6'] .scorebar__avatar:has(.team-badge) {
+  width: 64px;
+  height: 64px;
+}
+.scorebar[data-teams='6'] .scorebar__avatar {
+  border-width: 4px;
+}
+.scorebar[data-teams='6'] .scorebar__team {
+  gap: 12px;
+  padding-right: 18px;
+}
+.scorebar[data-teams='6'] .scorebar__gain {
+  right: 16px;
+  font-size: 26px;
+}
+
+/* ── 슬로우 리플레이 (Q5 A안) ──────────────────────────────────
+ * 재생용 <video>는 display.ts가 만든 싱글턴이고 카메라와 같은 슬롯에 나란히 붙는다.
+ * z-index를 주지 않는다 — DOM 순서상 카메라 바로 뒤, 크롬(.vs-borders 이하) 앞이라
+ * 위치 지정만으로 정확히 그 사이에 앉는다.
+ */
+.cam-replay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+.cam-replay[hidden] {
+  display: none;
+}
+
+/* ── 라이브 다크 프레임 (U118) ──────────────────────────────────
+ * 대기 화면의 알파 다크 영상 한 장을 카메라 위에 얹는다. 사진 백드롭 자리를 라이브가 대신하는
+ * 그림이라 **검정 지면을 두지 않는다** — 두면 알파의 구멍 너머로 카메라가 한 픽셀도 안 나온다
+ * (`standby-stack--on`의 `background: #000`이 여기서는 반대로 작동한다 · `src/live-frame.ts`).
+ *
+ * 리플레이와 같은 자리에 산다: display.ts가 만든 싱글턴이고 `.cam-slot` 안에 나란히 붙는다.
+ * z-index를 주지 않는 이유도 같다 — DOM 순서상 카메라·리플레이 **뒤**, 크롬(`.vs-borders`
+ * 이하, 슬롯 밖) **앞**이라 위치 지정만으로 정확히 그 사이에 앉는다.
+ */
+.live-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 어둡힘은 프레임 **아래**(카메라 바로 위)다. 위에 깔면 다크 영상의 밝은 획까지 눌러
+ * 프레임 자체가 흐려진다. 값은 `LIVE_FRAME_SCRIM_ALPHA`와 같아야 한다(테스트가 대조한다).
+ * 글리치 캔버스도 같은 순서로 다시 그린다(`drawLiveFrame`). */
+.live-frame__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.live-frame__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 표식은 좌상 종목 배지(.event-badge, 56px) 바로 아래 (U108 — 사용자 지시로 우하단에서 이동).
+ * left를 종목 배지와 맞춰 같은 세로 스택으로 읽히게 하고, 상단 VS 바·우상 타이머는 그대로 피한다. */
+.replay-badge {
+  position: absolute;
+  left: var(--inset-badge);
+  top: calc(var(--inset-badge) + 56px + 20px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 22px;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 999px;
+  background: var(--luxe-panel);
+  pointer-events: none;
+}
+.replay-badge__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: replay-pulse 1.4s var(--ease-out) infinite alternate;
+}
+/* 한글 라벨이라 폰트는 body 기본(--font, Pretendard)을 그대로 물려받는다 —
+ * --font-num/--font-label은 라틴 숫자·소형 대문자용이라 한글에 맞지 않는다. */
+.replay-badge__label {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+@keyframes replay-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.28;
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 게임 오프닝 · 대기 */
+.scene--game-standby-image {
+  padding: 0;
+  background: #000;
+}
+
+.game-standby-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene--game {
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(114, 88, 216, 0.24), transparent 36%),
+    linear-gradient(145deg, #11101a 0%, #08080d 72%);
+}
+
+.game__wash {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(115deg, transparent 0 74px, rgba(255, 255, 255, 0.018) 75px 76px);
+}
+
+.game__orbit {
+  position: absolute;
+  border: 1px solid rgba(140, 116, 235, 0.28);
+  border-radius: 50%;
+  animation: game-orbit 18s linear infinite;
+}
+
+.game__orbit--outer { width: 920px; height: 920px; }
+.game__orbit--inner { width: 690px; height: 690px; animation-direction: reverse; animation-duration: 13s; }
+
+.game__orbit::before,
+.game__orbit::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 22px rgba(215, 176, 78, 0.6);
+}
+
+.game__orbit::before { top: 8%; left: 23%; }
+.game__orbit::after { right: 9%; bottom: 25%; }
+
+.game__card {
+  position: relative;
+  z-index: 2;
+  width: 1420px;
+  padding: 86px 120px 92px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 34px;
+  background: rgba(12, 12, 19, 0.78);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  animation: game-card-in 420ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* 폰트 토큰은 `--font`/`--font-label`/`--font-num` 셋뿐이다 — 없는 이름을 `font:` 단축
+ * 속성에 쓰면 선언 전체가 버려져 크기까지 기본값으로 떨어진다(선서 카드 주석 참조, U79). */
+.game__eyebrow {
+  color: #a994ff;
+  font: 800 24px/1 var(--font-label);
+  letter-spacing: 0.16em;
+}
+
+.game__rule {
+  width: 96px;
+  height: 4px;
+  margin: 30px auto 38px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 28px rgba(215, 176, 78, 0.45);
+}
+
+.game__title {
+  margin: 0;
+  color: #fff;
+  font: 900 104px/1.08 var(--font);
+  letter-spacing: -0.045em;
+  text-shadow: 0 14px 42px rgba(0, 0, 0, 0.48);
+  animation: game-title-in 500ms 110ms cubic-bezier(0.16, 0.8, 0.22, 1) both;
+}
+
+.game__edition {
+  margin-top: 38px;
+  color: var(--muted);
+  font: 700 24px/1.2 var(--font-label);
+  letter-spacing: 0.1em;
+}
+
+.game__corner {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-color: rgba(215, 176, 78, 0.42);
+}
+
+.game__corner--tl { top: 80px; left: 96px; border-top: 2px solid; border-left: 2px solid; }
+.game__corner--br { right: 96px; bottom: 80px; border-right: 2px solid; border-bottom: 2px solid; }
+
+@keyframes game-card-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes game-title-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes game-orbit { to { transform: rotate(360deg); } }
+
+/* ── 승리 보드 카드는 여기 있었다 (U71 → U110에서 폐기)
+ * 2026-09-05 04:56 사용자 지시로 승리 발표가 씬에서 알파 오버레이 영상 + 승리 음악으로
+ * 바뀌었다. `.scene--game-victory` / `.game__card--victory` / `.victory__*` 규칙과
+ * 두 keyframe(`victory-crest-in`·`victory-label-in`)을 함께 걷어냈다 — 마크업이 사라진
+ * 규칙을 남겨 두면 다음 사람이 "이 화면이 아직 있나" 하고 되살린다. */
+
+@media (prefers-reduced-motion: reduce) {
+  .game__card,
+  .game__title,
+  .game__orbit { animation: none; }
+}
+
+/* ══════════════════════════════════════════ Broadcast Luxe 공통 골격
+ * 리더보드(S4)·출전명단·시상이 공유하는 보드/매스트헤드/헤더바/행 골격.
+ * 수치 정본은 `src/scenes/luxe-grid.ts`이고 `luxe-grid.test.ts`가 두 곳을 대조한다.
+ *
+ * 1920×1080 스테이지 격자
+ *   보드 1536×876 · 테두리 1px 두 겹 · 패딩 72/72/76 → 콘텐츠 1390×726
+ *   세로 = 매스트헤드 120 + 헤더바 76 + 간격 20 + 행 영역 510
+ *   가로 = 순위 pill 168 + 팀 448 + 가변 1fr(1부 550) + 우측 값 224
+ *   순위 pill은 흰 캡슐을 22px 덮어 190px, 캡슐은 left 168px에서 시작
+ *   행 = --step(4팀 127 / 5팀 102 / 6팀 85) − 18px, --rows-top이 블록을 세로 중앙에 놓는다
+ *
+ * 모션 계약: 보드는 첫 프레임부터 보이고 1초 안에 모든 정보가 완성된다.
+ * pill(z2) 뒤에서 흰 캡슐(z1)이 translateX+clip-path로 밀려 나온다.
+ *
+ * 재사용 토큰(--luxe-*)은 세 씬이 공유하므로 `src/styles/tokens.css`가 정본이다.
+ */
+
+/* 지면 — 정보 씬은 색이 아니라 밝기로만 깊이를 준다 */
+.scene--score,
+.scene--roster,
+.award--table,
+.award--total,
+.award--reveal {
+  background: var(--luxe-stage);
+}
+/* 보드를 쓰는 씬은 화면 중앙에 보드를 놓고 씬 페이드 대신 보드 자체 진입 모션을 쓴다 */
+.scene--score,
+.scene--roster,
+.award--table,
+.award--total {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  animation: none;
+}
+/* 방송 모니터의 결 한 겹. 162px 주기로 1px 선, 선 자체는 알파 8%다.
+ * --ambient-max(6%)는 화면 평균 휘도 상한이고 이 결의 평균 기여분은 8% / 162 ≈ 0.05%라 그 아래다.
+ * 정적 패턴이라 모션 예산에도 잡히지 않는다. */
+.scene--score::before,
+.scene--roster::before,
+.award--table::before,
+.award--total::before,
+.award--reveal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(var(--luxe-scanline) 1px, transparent 1px);
+  background-size: 100% var(--luxe-scanline-step);
+}
+
+.luxe-board,
+.sb__board {
+  position: relative;
+  width: 1536px;
+  height: 876px;
+  padding: 72px 72px 76px;
+  overflow: hidden;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: var(--luxe-panel-radius);
+  background: var(--luxe-panel);
+  box-shadow: var(--luxe-panel-shadow), var(--luxe-panel-glow);
+}
+
+/* ── 매스트헤드 ── */
+.luxe-mast,
+.sb__masthead {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.luxe-mast__text {
+  min-width: 0;
+  flex: 1;
+}
+/* Event Console 모노그램 — 리더보드·시상·출전명단이 같은 자리에 같은 크기로 쓴다.
+   마크 자체가 검정 바탕 + 흰 테두리라 지면 위에 그대로 얹는다(배경·필터 없음).
+   높이만 고정하고 폭은 비율대로 — 마스트헤드 120px 안에서 위아래 16px씩 남는다. */
+.luxe-mast__mark {
+  height: 88px;
+  width: auto;
+  flex: none;
+  object-fit: contain;
+  animation: sb-header-in 0.267s var(--ease-out) both;
+}
+.luxe-mast__eyebrow {
+  margin-bottom: 10px;
+  color: var(--luxe-violet-ink);
+  font-family: var(--font-label);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  animation: sb-header-in 0.267s var(--ease-out) both;
+}
+.luxe-mast__title,
+.sb__title {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: sb-title-in 0.267s var(--ease-out) both;
+}
+
+/* ── 헤더바 — 열 구성은 씬마다, 캡슐 chrome은 공통 ── */
+.luxe-headbar,
+.sb__table-head {
+  height: 76px;
+  display: grid;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--luxe-head-grad);
+  color: #fff;
+  transform-origin: center;
+  animation: sb-table-in 0.333s var(--ease-out) both;
+}
+.luxe-headbar__cell,
+.sb__head-rank,
+.sb__head-team,
+.sb__head-events,
+.sb__col {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-family: var(--font-label);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+/* pill은 겹침 22px만큼 오른쪽으로 넓다(190px). 순위 라벨도 그 중심(x=95)에 맞춘다. */
+.luxe-headbar__cell--rank,
+.sb__head-rank {
+  padding-left: 22px;
+}
+/* 캡슐 안 아바타 시작선(열 시작 + 56)과 같은 x에 TEAM 라벨을 세운다 */
+.luxe-headbar__cell--team,
+.sb__head-team {
+  padding-left: 56px;
+  text-align: left;
+}
+
+/* ── 행 영역 ── */
+.luxe-rows,
+.sb__rows {
+  position: relative;
+  height: 510px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+/* 행은 absolute라 세로 위치를 transform으로 만든다.
+ * 기본값은 마크업이 준 --row-index(팀/등수 순서)이고, 리더보드만 tick()이 순위 순서로
+ * inline transform을 덮어써 재정렬 트윈을 돌린다. tick이 없는 씬도 이 규칙만으로 배치된다. */
+.luxe-row,
+.sb__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--rows-top, 0px);
+  height: calc(var(--step) - 18px);
+  min-height: 64px;
+  transform: translateY(calc(var(--row-index, 0) * var(--step)));
+  transition: transform 0.4s var(--ease-out);
+  will-change: transform;
+}
+
+/* ── 순위 pill (z2) ── */
+.luxe-pill,
+.sb__rank {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--luxe-pill-grad);
+  box-shadow: var(--luxe-pill-shadow);
+  color: #fff;
+  font-family: var(--font-num);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.luxe-row > .luxe-pill,
+.sb__row > .sb__rank {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 190px;
+  height: 100%;
+  font-size: 62px;
+  animation: sb-rank-reveal 0.2s var(--ease-out) var(--rank-delay) both;
+}
+/* U79 — 선두 pill의 골드 테두리를 지웠다.
+ * 순위 pill은 숫자 자체가 이미 등수를 말한다. 여기에 1위만 금테를 더하면 **팀 색과 겹쳐**
+ * "옐로우 팀만 강조된 것"으로 읽혔다(사용자 지적: "1등표시라면 빼줘"). 등수 표시가 색
+ * 하이라이트로 이중화되면 팀 식별색 신호와 위계 신호가 같은 자리에서 다툰다.
+ * `is-lead`/`is-first` 클래스는 마크업에 남는다 — 글로우 정지 판정(D9)과 시상 히스토리
+ * 카드가 같은 의미 훅을 쓰므로, 시각 효과만 걷어낸다. */
+
+/* ── 흰 캡슐 (z1) ── */
+.luxe-capsule,
+.sb__row-body {
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--luxe-capsule-bg);
+  color: var(--luxe-capsule-ink);
+}
+.luxe-row > .luxe-capsule,
+.sb__row > .sb__row-body {
+  position: absolute;
+  left: 168px;
+  right: 0;
+  top: 0;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  align-items: center;
+  animation: sb-row-reveal 0.267s var(--ease-out) var(--row-delay) both;
+}
+.luxe-row > .luxe-capsule > *,
+.sb__row > .sb__row-body > * {
+  animation: sb-content-in 0.133s var(--ease-out) calc(var(--row-delay) + 67ms) both;
+}
+
+/* ── 캡슐 안 팀 식별부 ── */
+.luxe-id,
+.sb__id {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px 0 56px;
+}
+/* 팀 식별색은 아바타 링 하나로만 — 면 채색·텍스트색 금지 규칙 유지 */
+.luxe-avatar,
+.sb__avatar {
+  width: 86px;
+  height: 86px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  border: 6px solid color-mix(in srgb, var(--team) 70%, #fff);
+  border-radius: 50%;
+  background: var(--luxe-avatar-bg);
+}
+/* 로고는 **링 안쪽 지름을 꽉 채운다** (U79).
+ * 예전에는 상자마다 로고 px를 따로 적었고 그 값이 안쪽 지름보다 12~20px 작았다 — 512px
+ * 원형 엠블럼이 링 한가운데 작은 점처럼 앉아 보였다("왜 이렇게 작게 표시하는거야").
+ * `overflow: hidden`이 패딩 박스에서 자르므로 100%는 정확히 테두리 안쪽 원이다.
+ * 크기 정본을 **아바타 상자 하나로 모은다** — 5·6팀 축소나 씬별 지름이 바뀌어도
+ * 로고가 따라오고, 두 값이 어긋나 여백이 생기는 실패 모드 자체가 사라진다. */
+.luxe-logo,
+.sb__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  flex: none;
+}
+/* 오피셜 팀 배지 (U31) — 원본이 이미 "팀 색 테두리 + 남색 면"을 가진 원형 배지라,
+   아바타의 6px 팀 링을 그대로 두면 링이 두 겹으로 보인다. 배지가 붙은 아바타만
+   링을 hairline으로 낮추고 회색 원판을 지워, 배지 자신의 rim이 팀 식별을 맡게 한다.
+   사용자가 올린 임의 그림에는 그 링이 유일한 팀 신호이므로 손대지 않는다. */
+.team-badge {
+  border-radius: 50%;
+}
+.luxe-avatar:has(.team-badge),
+.sb__avatar:has(.team-badge) {
+  border-width: 2px;
+  background: transparent;
+}
+.luxe-logo-fallback,
+.sb__logo-fallback {
+  color: var(--luxe-capsule-num);
+  font-family: var(--font-num);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.luxe-name,
+.sb__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--luxe-capsule-ink);
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+/* ── 캡슐 안 보조 격자(종목 점수·선수 이름) — 항상 2줄 ── */
+/* 보조 격자의 크기는 서로 독립된 두 예산이 정한다.
+ * 세로(-v) = 행 높이 → data-teams, 가로(-h) = 열 폭 → data-cols.
+ * 글자 크기는 두 예산의 min()이라, 6팀 × 7종목처럼 겹칠 때도
+ * 나중에 온 셀렉터가 이기는 특이도 사고가 나지 않는다. */
+.luxe-rows,
+.sb__rows {
+  --cells-fs-v: 28px;
+  --cells-fs-h: 28px;
+  --cells-label-v: 18px;
+  --cells-label-h: 18px;
+  --cells-row-gap: 8px;
+  --cells-col-gap: 28px;
+  --cells-pad-x: 20px;
+}
+.luxe-cells,
+.sb__cells {
+  min-width: 0;
+  height: auto;
+  display: grid;
+  grid-template-columns: repeat(var(--event-cols, 2), minmax(0, 1fr));
+  align-items: center;
+  gap: var(--cells-row-gap) var(--cells-col-gap);
+  padding: 0 var(--cells-pad-x);
+}
+
+/* ── 캡슐 오른쪽 값 ── */
+.luxe-value,
+.sb__total {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--luxe-violet-ink);
+  font-family: var(--font-num);
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+@keyframes sb-header-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+}
+@keyframes sb-title-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+}
+@keyframes sb-table-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.02);
+  }
+}
+@keyframes sb-rank-reveal {
+  from {
+    opacity: 0;
+    transform: scaleX(0.05);
+  }
+}
+@keyframes sb-row-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(-110px);
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes sb-content-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── 5팀 — 행 84px ── */
+.luxe-rows[data-teams='5'] .luxe-id,
+.sb__rows[data-teams='5'] .sb__id {
+  gap: 16px;
+}
+.luxe-rows[data-teams='5'] > .luxe-row > .luxe-pill,
+.sb__rows[data-teams='5'] .sb__rank {
+  font-size: 50px;
+}
+.luxe-rows[data-teams='5'] .luxe-avatar,
+.sb__rows[data-teams='5'] .sb__avatar {
+  width: 66px;
+  height: 66px;
+  border-width: 5px;
+}
+.luxe-rows[data-teams='5'] .luxe-name,
+.sb__rows[data-teams='5'] .sb__name {
+  font-size: 34px;
+}
+.luxe-rows[data-teams='5'],
+.sb__rows[data-teams='5'] {
+  --cells-fs-v: 24px;
+  --cells-label-v: 16px;
+  --cells-row-gap: 6px;
+}
+.luxe-rows[data-teams='5'] .luxe-value,
+.sb__rows[data-teams='5'] .sb__total {
+  font-size: 52px;
+}
+
+/* ── 6팀 — 행 67px ── */
+.luxe-rows[data-teams='6'] .luxe-id,
+.sb__rows[data-teams='6'] .sb__id {
+  gap: 12px;
+}
+.luxe-rows[data-teams='6'] > .luxe-row > .luxe-pill,
+.sb__rows[data-teams='6'] .sb__rank {
+  font-size: 40px;
+}
+.luxe-rows[data-teams='6'] .luxe-avatar,
+.sb__rows[data-teams='6'] .sb__avatar {
+  width: 54px;
+  height: 54px;
+  border-width: 4px;
+}
+.luxe-rows[data-teams='6'] .luxe-name,
+.sb__rows[data-teams='6'] .sb__name {
+  font-size: 28px;
+}
+.luxe-rows[data-teams='6'],
+.sb__rows[data-teams='6'] {
+  --cells-fs-v: 20px;
+  --cells-label-v: 13px;
+  --cells-row-gap: 4px;
+}
+.luxe-rows[data-teams='6'] .luxe-value,
+.sb__rows[data-teams='6'] .sb__total {
+  font-size: 42px;
+}
+
+/* ── 보조 격자가 3·4열로 늘어나면 가로 예산이 좁아진다 ── */
+.luxe-rows[data-cols='3'],
+.sb__rows[data-cols='3'] {
+  --cells-fs-h: 25px;
+  --cells-label-h: 16px;
+  --cells-col-gap: 20px;
+  --cells-pad-x: 16px;
+}
+.luxe-rows[data-cols='4'],
+.sb__rows[data-cols='4'] {
+  --cells-fs-h: 22px;
+  --cells-label-h: 14px;
+  --cells-col-gap: 16px;
+  --cells-pad-x: 16px;
+}
+
+/* 씬 진입이 아닌 재렌더 — 보드 골격의 진입 모션을 건너뛴다.
+ * `renderInto`가 innerHTML을 통째로 갈아끼우므로, 대결팀 토글처럼 같은 씬 안에서 데이터만
+ * 바뀌어도 1초짜리 등장이 온에어 중에 다시 돈다. `data-scene-enter`(scenes/index.ts)가
+ * 붙어 있는 첫 렌더에서만 모션을 살린다.
+ * 시상 리빌의 단계별 모션(slot-reveal)은 매 박자마다 도는 게 맞으므로 여기 넣지 않는다. */
+[data-scene]:not([data-scene-enter]) .luxe-mast__eyebrow,
+[data-scene]:not([data-scene-enter]) .luxe-mast__title,
+[data-scene]:not([data-scene-enter]) .luxe-headbar,
+[data-scene]:not([data-scene-enter]) .luxe-row > .luxe-pill,
+[data-scene]:not([data-scene-enter]) .luxe-row > .luxe-capsule,
+[data-scene]:not([data-scene-enter]) .luxe-row > .luxe-capsule > *,
+[data-scene]:not([data-scene-enter]) .rs__panel,
+[data-scene]:not([data-scene-enter]) .rs__vs,
+[data-scene]:not([data-scene-enter]) .award__mark,
+[data-scene]:not([data-scene-enter]) .sb__game-icon,
+[data-scene]:not([data-scene-enter]) .sb__title,
+[data-scene]:not([data-scene-enter]) .sb__table-head,
+[data-scene]:not([data-scene-enter]) .sb__rank,
+[data-scene]:not([data-scene-enter]) .sb__row-body,
+[data-scene]:not([data-scene-enter]) .sb__row-body > * {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rs__panel,
+  .rs__vs,
+  .luxe-mast__eyebrow,
+  .luxe-mast__title,
+  .luxe-headbar,
+  .luxe-row > .luxe-pill,
+  .luxe-row > .luxe-capsule,
+  .luxe-row > .luxe-capsule > *,
+  .sb__game-icon,
+  .sb__title,
+  .sb__table-head,
+  .sb__rank,
+  .sb__row-body,
+  .sb__row-body > * {
+    animation: none;
+  }
+}
+
+/* ── 씬별 열 구성 — 같은 격자 위에서 열 수만 다르다 ── */
+.sb__table-head {
+  grid-template-columns: 168px 448px minmax(0, 1fr) 224px;
+}
+.sb__row > .sb__row-body {
+  grid-template-columns: 448px minmax(0, 1fr) 224px;
+}
+/* U33 — 시상 표도 종목별 누적 내역을 싣는다. 리더보드와 **같은 열 폭**이라
+   두 화면을 번갈아 띄워도 팀명·숫자가 같은 x에 선다. */
+.aw__headbar {
+  grid-template-columns: 168px 448px minmax(0, 1fr) 224px;
+}
+.aw__row > .aw__body {
+  grid-template-columns: 448px minmax(0, 1fr) 224px;
+}
+
+/* ════════════════════════════════════════════════════════ S4 리더보드
+ * Broadcast Luxe — docs/decisions/2026-09-03-console-open-decisions.md Q1 확정.
+ * 골격은 위의 공통 규칙이 만들고, 여기서는 리더보드 고유의 열 구성과 종목 칸만 정한다.
+ * 순위 재정렬은 .sb__row의 transform transition, 총점 카운트업은 anim.ts가 맡는다.
+ */
+
+.luxe-event-item,
+.sb__event-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+}
+.luxe-event-label,
+.sb__event-label {
+  overflow: hidden;
+  color: var(--luxe-capsule-sub);
+  font-size: min(var(--cells-label-v), var(--cells-label-h));
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb__event-item.is-hl .sb__event-label {
+  color: var(--luxe-violet-ink);
+}
+/* U138 — BONUS 열은 종목이 아니다. 라벨을 숫자 서체로 눌러 네 종목 이름과 층을 가른다.
+ * 열 폭·급수는 종목 칸과 같다(`--cells-*`) — 폭 예산을 따로 먹지 않는다. */
+.sb__event-item--bonus .sb__event-label {
+  font-family: var(--font-num);
+  letter-spacing: 0;
+  opacity: 0.82;
+}
+.luxe-cell,
+.sb__cell {
+  min-width: 0;
+  text-align: right;
+  color: var(--luxe-capsule-num);
+  font-family: var(--font-num);
+  font-size: min(var(--cells-fs-v), var(--cells-fs-h));
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.luxe-cell.is-empty,
+.sb__cell.is-empty {
+  color: var(--luxe-capsule-mute);
+}
+.sb__cell.is-hl {
+  color: var(--luxe-violet-ink);
+}
+/* U89 — 종목 공개 큐는 그 종목 한 칸만 남긴다(scenes/score.ts).
+ * 한 칸을 1fr 격자 위에 그대로 두면 라벨이 왼쪽 끝, 숫자가 오른쪽 끝으로 벌어져 한 덩어리로
+ * 읽히지 않는다. 내용 폭으로 줄여 가운데 세우고, 비어 버린 가로 예산만큼 글자를 키운다.
+ * 총점(64px)보다는 작게 — 이번 판 점수와 최종 점수의 위계는 그대로 둔다. */
+.sb__cells--solo {
+  --cells-fs-v: 44px;
+  --cells-fs-h: 44px;
+  --cells-label-v: 24px;
+  --cells-label-h: 24px;
+  grid-template-columns: minmax(0, auto);
+  justify-content: center;
+}
+.sb__cells--solo .sb__event-item {
+  gap: 16px;
+}
+
+
+/* ════════════════════════════════════════════════════════ 타이머 (풀스크린)
+ * cap_01 OBS 러닝클록 — 컨덴스드 볼드 숫자 하나, 아래 얇은 진행 바.
+ * 마지막 10초는 점멸이 아니라 **색 전환**(1s).
+ */
+
+.scene--timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  transition: background 1s ease;
+}
+
+/* U114 (2026-09-05 사용자 지시, 출력 타이머 씬) — "위에 글씨 크게, 아래 숫자 좀 작게".
+ * U99가 고친 건 조작 패널의 타이머 탭뿐이었다. 라벨 27px → 128px(96px 실측에서 아직 캡션처럼 읽혀 한 단 더), 숫자 460px → 300px.
+ * 라벨이 주인공에 가까워지므로 흐린 색(--fg-dim) 대신 본문색으로 올리고, 자간은 한글이라 음수 유지. */
+.bigtimer__label {
+  font-size: 128px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--fg);
+  margin-bottom: 40px;
+}
+
+.bigtimer {
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 300px;
+  line-height: 0.82;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  transition: color 1s ease;
+}
+
+.scene--timer.is-danger .bigtimer {
+  color: var(--danger-soft);
+}
+.scene--timer.is-danger .bigtimer__label {
+  color: var(--danger-soft);
+}
+.scene--timer.is-done .bigtimer {
+  color: var(--fg-mute);
+}
+
+.bigtimer__bar {
+  width: 880px; /* U114 — 숫자 폭(300px × 5자 ≈ 800)에 맞춤 */
+  height: 8px;
+  margin-top: 48px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.bigtimer__fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transition: width 0.25s linear, background 1s ease;
+}
+.scene--timer.is-danger .bigtimer__fill {
+  background: var(--danger);
+}
+
+/* ════════════════════════════════════════════════════════ 출전 명단
+ * U28 — Broadcast Luxe 언어를 명단 콘텐츠에 맞게 응용한다. 리더보드의 행 표는 쓰지 않는다.
+ * 공유하는 것은 보드 인셋·마스트헤드·아바타 링·흰 캡슐·보라 구조색·자간 규칙뿐이다.
+ *
+ * 1920×1080 세로 예산: 보드 콘텐츠 726 − 매스트헤드 120 − 간격 20 = 본문 586
+ *   기본   패널 그리드 2열(4팀) / 3열(5~6팀), 두 줄. 세로 gap 24 → 패널 281
+ *   대결   좌·우 두 팀만 본문 586 전체를 쓰고, 가운데 VS 160을 둔다.
+ *
+ * 이름 칸 영역의 세로 예산 137px = 패널 281 − 테두리 1px 두 겹 − 패딩 52 − 헤더 76 − 간격 14.
+ * 개수별로 높이·글자를 고정한다(--seat-h / --seat-fs). 1~3칸 한 줄씩 크게,
+ * 4~6칸 2열, 7칸부터 3열 — 어느 경우도 3행을 넘지 않아 137 안에 들어온다.
+ * 상한(9칸)을 넘으면 roster.ts가 8명 + "외 n명" 배지로 잘라 보낸다.
+ */
+
+.rs__grid,
+.rs__duel {
+  height: 586px;
+  margin-top: 20px;
+  min-height: 0;
+}
+
+.rs__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--panel-cols, 2), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 24px;
+}
+
+/* 조별 명단(U61) — 두 패널뿐이라 한 줄이 586px를 통째로 먹으면 이름 아래가 텅 빈다.
+ * 행 높이를 전체 그리드의 한 줄(= 두 줄 중 하나)과 같게 두고 세로 가운데로 모은다.
+ * 대결 레이아웃(`rs__duel`)과 달리 VS 타이포·대칭 무대가 없다 — 같은 패널 두 칸이다. */
+.rs__grid--heat {
+  grid-auto-rows: minmax(0, 400px);
+  align-content: center;
+}
+
+/* ── 팀 패널 ── */
+.rs__panel {
+  --seat-h: 64px;
+  --seat-fs: 34px;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 26px;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 36px;
+  background: rgba(255, 255, 255, 0.045);
+  animation: rs-panel-in 0.267s var(--ease-out) var(--panel-delay) both;
+}
+
+/* 헤더 — 아바타 링(팀 색) + 팀명 pill(팀 색 링) + 인원 배지 */
+.rs__head {
+  flex: none;
+  min-width: 0;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.rs__panel .luxe-avatar {
+  width: 64px;
+  height: 64px;
+  border-width: 5px;
+}
+.rs__panel .luxe-logo-fallback {
+  font-size: 18px;
+}
+.rs__team {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  border: 3px solid color-mix(in srgb, var(--team) 62%, transparent);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.rs__count {
+  flex: none;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(114, 88, 216, 0.22);
+  color: var(--luxe-violet-lit);
+  font-family: var(--font-num);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* ── 이름 캡슐 — 이 씬에서 가장 큰 글자. 흰 캡슐 언어를 이름에 쓴다. ── */
+.rs__seats {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--seat-cols, 1), minmax(0, 1fr));
+  grid-auto-rows: var(--seat-h);
+  align-content: center;
+  gap: 10px 14px;
+}
+.rs__seat {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: var(--luxe-capsule-bg);
+  color: var(--luxe-capsule-ink);
+}
+.rs__seat-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--seat-fs);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+/* 명단 미정 — 캡슐을 비우고 무채로 낮춘다 */
+.rs__panel.is-empty {
+  background: rgba(255, 255, 255, 0.022);
+}
+.rs__panel.is-empty .rs__count {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fg-mute);
+}
+.rs__seat--none {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.1);
+  color: var(--fg-mute);
+}
+.rs__seat--none .rs__seat-name {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* 인원별 캡슐 규격 — 3열 이하 한 줄, 4명부터 2열. 어느 조합도 seats 영역을 넘지 않는다. */
+.rs__panel[data-seats='0'],
+.rs__panel[data-seats='1'] {
+  --seat-h: 72px;
+  --seat-fs: 38px;
+}
+.rs__panel[data-seats='2'] {
+  --seat-h: 63px;
+  --seat-fs: 34px;
+}
+.rs__panel[data-seats='3'] {
+  --seat-h: 39px;
+  --seat-fs: 24px;
+}
+.rs__panel[data-seats='4'] {
+  --seat-h: 63px;
+  --seat-fs: 30px;
+}
+.rs__panel[data-seats='5'],
+.rs__panel[data-seats='6'] {
+  --seat-h: 39px;
+  --seat-fs: 22px;
+}
+/* 7칸 이상 — 3열 3행. 몸으로 말해요처럼 인원 상한이 없는 종목에서 실제로 온다. */
+.rs__panel[data-seats='7'] {
+  --seat-h: 39px;
+  --seat-fs: 22px;
+}
+/* 넘침 배지 — 이름이 아니라 안내라 한 단 낮춘다 */
+.rs__seat--more {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg-soft);
+}
+.rs__seat--more .rs__seat-name {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 5~6팀 — 패널이 3열이라 가로가 좁다. 헤더와 이름을 한 단 줄인다. */
+.rs__grid[data-cols='3'] .rs__panel .luxe-avatar {
+  width: 56px;
+  height: 56px;
+  border-width: 4px;
+}
+.rs__grid[data-cols='3'] .rs__head {
+  height: 66px;
+  gap: 12px;
+}
+.rs__grid[data-cols='3'] .rs__team {
+  height: 50px;
+  padding: 0 16px;
+  font-size: 26px;
+}
+.rs__grid[data-cols='3'] .rs__count {
+  height: 38px;
+  padding: 0 13px;
+  font-size: 20px;
+}
+.rs__grid[data-cols='3'] .rs__panel {
+  --seat-fs: 28px;
+}
+.rs__grid[data-cols='3'] .rs__panel[data-seats='3'],
+.rs__grid[data-cols='3'] .rs__panel[data-seats='5'],
+.rs__grid[data-cols='3'] .rs__panel[data-seats='6'] {
+  --seat-fs: 20px;
+}
+.rs__grid[data-cols='3'] .rs__panel[data-seats='7'] {
+  --seat-fs: 18px;
+}
+
+/* ── 대결 종목 ── */
+.rs__duel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.rs__duel-stage {
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 20px;
+}
+/* VS — 장식을 빼고 타이포 하나로만 좌·우 대결 구도를 잡는다. */
+.rs__vs {
+  align-self: center;
+  height: auto;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff;
+  font-family: var(--font-num);
+  font-size: 112px;
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  animation: rs-panel-in 0.267s var(--ease-out) 133ms both;
+}
+
+.rs__panel--duel {
+  padding: 34px;
+  border-radius: 44px;
+  gap: 18px;
+}
+.rs__panel--duel .rs__head {
+  height: 96px;
+}
+.rs__panel--duel .luxe-avatar {
+  width: 88px;
+  height: 88px;
+  border-width: 6px;
+}
+.rs__panel--duel .rs__team {
+  height: 70px;
+  font-size: 42px;
+}
+.rs__panel--duel .rs__count {
+  height: 54px;
+  padding: 0 22px;
+  font-size: 30px;
+}
+/* 좌·우 패널은 세로가 넉넉하다 — 이름을 한 단 더 키운다. */
+.rs__panel--duel[data-seats='0'],
+.rs__panel--duel[data-seats='1'] {
+  --seat-h: 112px;
+  --seat-fs: 54px;
+}
+.rs__panel--duel[data-seats='2'] {
+  --seat-h: 96px;
+  --seat-fs: 46px;
+}
+.rs__panel--duel[data-seats='3'] {
+  --seat-h: 80px;
+  --seat-fs: 38px;
+}
+.rs__panel--duel[data-seats='4'] {
+  --seat-h: 96px;
+  --seat-fs: 38px;
+}
+.rs__panel--duel[data-seats='5'],
+.rs__panel--duel[data-seats='6'] {
+  --seat-h: 80px;
+  --seat-fs: 30px;
+}
+.rs__panel--duel[data-seats='7'] {
+  --seat-h: 80px;
+  --seat-fs: 26px;
+}
+
+/* 패널 진입 — 리더보드 행과 같은 리듬(0.267s · --ease-out · 계단 지연), 방향만 세로.
+ * `to` 블록은 두지 않는다 — both fill이 끝난 뒤 상태 클래스를 덮는 사고(sb-rise)를 피한다. */
+@keyframes rs-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 제시어 카드
+ * 풀스크린 타이틀 — cap_22 지상파 강조형 타이틀의 절제 버전.
+ */
+
+.scene--prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0 var(--safe-x);
+  text-align: center;
+}
+
+.prompt__round {
+  font-family: var(--font-label);
+  font-size: 24px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3em; /* 소형 대문자 라벨 */
+  color: var(--accent);
+  margin-bottom: 26px;
+}
+
+.prompt__cat {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg-dim);
+  padding: 10px 26px;
+  background: var(--surface-2);
+  margin-bottom: 34px;
+}
+
+.prompt__word {
+  font-size: 210px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+  color: var(--fg);
+  max-width: 1600px;
+}
+
+.prompt__count {
+  margin-top: 44px;
+  font-family: var(--font-num);
+  font-size: 150px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  animation: count-pop 0.45s var(--ease-out);
+}
+.prompt__count[data-n='0'] {
+  font-family: var(--font);
+  font-size: 110px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+@keyframes count-pop {
+  from {
+    opacity: 0;
+    transform: scale(1.14);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 긴급 속보 스팅
+ * 모델: cap_25 YTN — 레드 전폭 + 흰 고딕 볼드 한 줄. 1초 안에 끝난다.
+ */
+
+.scene--breaking {
+  background: var(--danger);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.breaking__flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: breaking-flash 1s steps(1) both;
+}
+
+@keyframes breaking-flash {
+  0% {
+    opacity: 1;
+  }
+  6% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.75;
+  }
+  14% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 하단 전폭 바 — 속보 헤드라인이 앉는 자리(YTN 문법) */
+.breaking__scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 132px;
+  background: rgba(0, 0, 0, 0.42);
+  border-top: 4px solid #fff;
+}
+
+.breaking__word {
+  position: relative;
+  font-family: var(--font-num);
+  font-size: 300px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.breaking__word span {
+  display: block;
+}
+.breaking__word-b,
+.breaking__word-c {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+}
+.breaking__word-b {
+  color: #4de3ff;
+  animation: glitch-b 0.42s steps(3) infinite;
+}
+.breaking__word-c {
+  color: #ffe14d;
+  animation: glitch-c 0.34s steps(3) infinite;
+}
+
+@keyframes glitch-b {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(-9px, 3px);
+    opacity: 0.85;
+  }
+}
+@keyframes glitch-c {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(8px, -4px);
+    opacity: 0.7;
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 영상 */
+
+.scene--video {
+  background: #000;
+}
+.video-slot {
+  position: absolute;
+  inset: 0;
+}
+.video-el {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+.video__empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 22px 34px;
+  background: var(--surface);
+  border-left: 4px solid var(--accent);
+  font-size: 26px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+/* ════════════════════════════════════════════════════════ 현장 사진 슬라이드쇼 (계획 §4-3)
+ *
+ * 두 레이어(A/B)를 겹쳐 두고 opacity만 교차시킨다. transform(Ken Burns)과 함께 **합성만 하는**
+ * 속성이라 레이아웃·페인트가 0이고, 1080p 알파 스팅어와 겹쳐도 GPU에서 끝난다.
+ *
+ * z-index를 새로 만들지 않는다 — 레이어는 `#stage` 안에 살고, 기존 근거
+ * (`#ambient` 5 < `#fx` 40 < `#fade-black` 44 < `#transition-video` 45 < `#fs-btn` 50 < `.audio-unlock` 60)는
+ * 전부 stage **밖**의 형제다. 즉 스팅어·검정 페이드는 언제나 사진 위에 온다.
+ */
+
+.scene--photos {
+  position: absolute;
+  inset: 0;
+  /* `--bg-brand`는 존재하지 않는 토큰이다 (§11 M2). 스테이지 지면과 같은 void 색을 쓴다 —
+     `object-fit: contain`이 만드는 세로 사진 좌우 여백도 이 색으로 이어져 경계가 보이지 않는다. */
+  background: var(--bg-void);
+}
+
+/* 사진 뒤에 항상 깔리는 지면. 사진이 0장이면 이것만 남는다(문구 없음 — 프로젝터에 운영 문구 금지). */
+.photo-brand {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-void);
+}
+
+.photo-stage {
+  position: absolute;
+  inset: 0;
+  /* Ken Burns로 확대된 이미지가 스테이지 밖으로 삐져나가지 않게 */
+  overflow: hidden;
+}
+
+.photo-stage::before,
+.photo-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.photo-stage.is-vignette::before {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, transparent 44%, rgba(0, 0, 0, 0.72) 100%);
+}
+
+.photo-stage.is-grain::after {
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: normal;
+  animation: photo-grain 0.28s steps(2, end) infinite;
+}
+
+@keyframes photo-grain {
+  0% {
+    transform: translate3d(-2%, -2%, 0) scale(1.06);
+  }
+  25% {
+    transform: translate3d(2%, -1%, 0) scale(1.06);
+  }
+  50% {
+    transform: translate3d(-1%, 2%, 0) scale(1.06);
+  }
+  75% {
+    transform: translate3d(1%, 1%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(-2%, -2%, 0) scale(1.06);
+  }
+}
+
+.photo-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 잘린 얼굴은 되돌릴 수 없지만 레터박스는 그냥 여백이다 (§10 Q1) */
+  object-fit: contain;
+  opacity: 0;
+  transform-origin: center;
+  /* 스팅어가 덮는 동안 display.ts가 인라인 `auto`로 덮어 합성 레이어를 반납한다 (§11 M3) */
+  will-change: opacity, transform;
+  /* 확대 중 인접 픽셀 보간 품질 (Chrome 기본값과 같지만 의도를 고정한다) */
+  image-rendering: auto;
+  display: block;
+}
+
+.photo-layer.is-on {
+  opacity: 1;
+}
+
+.photo-stage.is-sepia .photo-layer {
+  filter: sepia(0.72) saturate(0.82) contrast(1.04);
+}
+
+/* 대기 화면에서는 텍스트·엠블럼을 해치지 않는 낮은 명암의 cover 배경으로만 쓴다. */
+.photo-backdrop {
+  z-index: 0;
+  filter: saturate(0.72) contrast(0.88);
+}
+
+.photo-backdrop .photo-layer {
+  object-fit: cover;
+  opacity: 0;
+}
+
+.photo-backdrop .photo-layer.is-on {
+  opacity: 0.22;
+}
+
+.photo-backdrop.is-grain::after {
+  opacity: 0.12;
+}
+
+/* 모션 최소화: Ken Burns 자체를 끈다(display.ts도 transform을 심지 않지만, 인라인이 남아 있어도 이긴다) */
+@media (prefers-reduced-motion: reduce) {
+  .photo-layer {
+    transform: none !important;
+  }
+
+  .photo-stage.is-grain::after {
+    animation: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 상황판 (2부)
+ * 모델: cap_18 더 지니어스 상황판 — 헤더 바 + 인물 카드 그리드 + 상태 라벨.
+ * 밝은 종이 대신 다크 무채로 옮기되, 카드 구조·라벨 위계는 그대로 가져온다.
+ */
+
+.scene--suspects {
+  padding: 56px var(--safe-x) 50px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sus__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  margin-bottom: 30px;
+  border-bottom: 3px solid var(--accent);
+}
+
+.sus__title {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.sus__title::before {
+  content: '';
+  width: 10px;
+  height: 52px;
+  background: var(--accent);
+}
+
+.sus__counter {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.sus__counter-n {
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 72px;
+  line-height: 1;
+  color: var(--accent);
+}
+.sus__counter-l {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+
+.sus__grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 20px 22px;
+  min-height: 0;
+}
+
+.sus__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--line-2);
+  overflow: hidden;
+  transition: opacity 0.4s var(--ease-out), filter 0.4s var(--ease-out),
+    transform 0.4s var(--ease-out);
+}
+.sus__card.is-out {
+  transform: scale(0.965);
+  background: var(--bg-deep);
+}
+.sus__card.is-out .sus__code,
+.sus__card.is-out .sus__photo,
+.sus__card.is-out .sus__name,
+.sus__card.is-out .sus__sport {
+  filter: grayscale(1);
+  opacity: 0.34;
+}
+
+.sus__code {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  z-index: 2;
+}
+
+.sus__photo {
+  flex: 1;
+  display: grid;
+  place-items: end center;
+  background: var(--surface-2);
+  min-height: 0;
+  overflow: hidden;
+}
+/* 실루엣 — 머리+어깨 두 조각 */
+.sus__silhouette {
+  position: relative;
+  width: 176px;
+  height: 214px;
+  opacity: 0.55;
+}
+.sus__silhouette::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 96px;
+  height: 96px;
+  margin-left: -48px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+.sus__silhouette::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 110px;
+  width: 176px;
+  height: 104px;
+  margin-left: -88px;
+  border-radius: 88px 88px 0 0;
+  background: var(--surface-3);
+}
+
+.sus__name {
+  padding: 18px 20px 4px;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sus__sport {
+  padding: 0 20px 18px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.015em; /* 한글 라벨 — 자간 0 */
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sus__stamp {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%) rotate(-11deg);
+  padding: 10px 34px;
+  border: 6px solid var(--danger);
+  background: rgba(8, 12, 20, 0.72);
+  color: var(--danger-soft);
+  font-size: 60px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  z-index: 3;
+  animation: stamp-in 0.34s var(--ease-out) both;
+}
+
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-11deg) scale(1.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-11deg) scale(1);
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 제출 현황 (2부)
+ * 모델: cap_12 F1 타이밍 타워 — 순위 / 팀컬러 세로 바 / 이름 / 기록 우측 정렬.
+ * 상태 전환은 보더 색으로만: 미제출 디밍 → 제출 시 인포 블루 2px (§3.2).
+ */
+
+.scene--submit {
+  padding: 56px var(--safe-x) 50px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sub__head {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  padding-bottom: 14px;
+  margin-bottom: 34px;
+  border-bottom: 3px solid var(--accent);
+}
+.sub__eyebrow {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em; /* 한글 라벨 — 자간 0 */
+  color: var(--accent);
+  padding-bottom: 13px;
+}
+.sub__title {
+  flex: 1;
+  font-size: 58px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+/* 이 씬에서는 타이머가 헤더 안에 앉는다 — HUD 위치(우상)는 유지 */
+.scene--submit .timer-badge {
+  position: absolute;
+  right: 0;
+  bottom: 12px;
+  top: auto;
+}
+
+.sub__bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.sub__bar {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 190px;
+  align-items: center;
+  gap: 28px;
+  padding: 0 30px 0 34px;
+  background: var(--surface);
+  border-left: 6px solid var(--team);
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transition: opacity 0.3s var(--ease-out), border-color 0.3s var(--ease-out),
+    background 0.3s var(--ease-out);
+  animation: sb-rise var(--dur-in) var(--ease-out) both;
+}
+.sub__bar:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.sub__bar:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.sub__bar:nth-child(3) {
+  animation-delay: 0.21s;
+}
+.sub__bar:nth-child(4) {
+  animation-delay: 0.29s;
+}
+.sub__bar:nth-child(5) {
+  animation-delay: 0.37s;
+}
+.sub__bar:nth-child(6) {
+  animation-delay: 0.45s;
+}
+
+/* 행이 아래에서 한 뼘 올라오며 뜬다. 리더보드 행 진입과 같은 리듬(--dur-in · --ease-out ·
+ * 0.08s 계단)이고 방향만 세로다. 바운스·탄성 금지(§3.3)라 오버슈트 없이 한 번에 멎는다.
+ * 감속 모션은 tokens.css의 전역 prefers-reduced-motion 규칙이 함께 잡는다.
+ *
+ * **`to` 블록을 두지 않는다.** `both` fill이면 끝난 뒤에도 to의 값이 계속 적용돼
+ * `.sub__bar.is-wait`의 40% 디밍(§3.2)을 영구히 덮어쓴다. from만 두면 요소는 자기
+ * 원래 값으로 돌아가므로 상태 클래스가 그대로 산다 — 이 파일의 다른 진입 keyframe 관례. */
+@keyframes sb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* 미제출 — 디밍 (§3.2 "미제출은 40% 오퍼시티로 디밍") */
+.sub__bar.is-wait {
+  opacity: 0.44;
+}
+/* 제출 완료 — 정보(블루). 2부 액센트(크림슨=위험)와 역할을 분리한다. */
+.sub__bar.is-ok {
+  border-top-color: var(--info);
+  border-right-color: var(--info);
+  border-bottom-color: var(--info);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--info);
+}
+.sub__bar.is-ng {
+  border-top-color: var(--danger);
+  border-right-color: var(--danger);
+  border-bottom-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.sub__team {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sub__status {
+  display: flex;
+  align-items: center;
+}
+.sub__wait {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em; /* 한글 라벨 — 자간 0 */
+  color: var(--fg-mute);
+}
+.sub__time {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-num);
+  font-weight: 600;
+  font-size: 46px;
+  line-height: 1;
+  color: var(--fg-soft);
+}
+.sub__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  font-family: var(--font);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+.sub__bar.is-ok .sub__icon {
+  background: var(--info);
+  color: #fff;
+}
+.sub__bar.is-ng .sub__icon {
+  background: var(--danger);
+  color: #fff;
+}
+
+.sub__rank {
+  justify-self: end;
+  min-width: 132px;
+  text-align: center;
+  padding: 12px 0 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 1;
+}
+.sub__rank.is-none {
+  background: transparent;
+  color: var(--fg-mute);
+  border: 1px solid var(--line);
+}
+
+/* ════════════════════════════════════════════════════════ 시상
+ * Broadcast Luxe (U20) — 시각만 교체하고 2박자 공개 상태머신은 그대로다.
+ * 표·합산 단계는 리더보드와 같은 보드 격자, 리빌·우승은 풀스크린 무대.
+ */
+
+/* ── 표(1·2부 순위) · 합산 카운트업 — 공통 골격 위의 값 크기만 정한다 ── */
+.aw__rows .aw__pts {
+  font-size: 52px;
+}
+.aw__rows .aw__total-num {
+  font-size: 80px;
+}
+.aw__rows[data-teams='5'] .aw__pts {
+  font-size: 44px;
+}
+.aw__rows[data-teams='5'] .aw__total-num {
+  font-size: 66px;
+}
+.aw__rows[data-teams='6'] .aw__pts {
+  font-size: 36px;
+}
+.aw__rows[data-teams='6'] .aw__total-num {
+  font-size: 54px;
+}
+
+/* ── 리빌 · 우승 무대 ── */
+.award--reveal,
+.award--winner {
+  padding: 62px var(--safe-x) 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.award__eyebrow {
+  font-family: var(--font-label);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--luxe-violet-lit);
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+/* 상단 마크 — 불꽃 엠블럼 대신 텍스트 워드마크. 사용자 제공 monogram 도착 전까지의 정본이다.
+ * (인계 계약 2026-08-26 §0-1: 임의 불꽃 엠블럼 사용 금지) */
+.award__mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 54px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  animation: mark-pulse 1.6s var(--ease-out) both;
+}
+.award__mark-name {
+  color: #fff;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+.award__mark-sub {
+  font-family: var(--font-label);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--luxe-violet-lit);
+}
+
+@keyframes mark-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.award--reveal {
+  padding-top: 178px;
+}
+.award--reveal .award__eyebrow {
+  margin-bottom: 30px;
+}
+
+.award__reveal-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 26px;
+  min-height: 620px;
+}
+
+/*
+ * U127 독립 공개 — 이력 칸이 통째로 없으므로 격자를 한 칸으로 접는다.
+ * 두 칸 격자를 그대로 두면 카드 한 장이 오른쪽 1.1fr 자리에 붙어 무대가 한쪽으로 기운다.
+ * 폭은 스포트라이트가 혼자 쓰되 지나치게 늘어나지 않게 상한을 두고 가운데로 세운다.
+ */
+.award--reveal.is-solo .award__reveal-stage {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+.award--reveal.is-solo .award__reveal-focus {
+  width: min(100%, 1180px);
+}
+
+/* ── 공개 이력 — pill + 캡슐 리듬을 그대로, 크기만 한 단 작게 ── */
+.award__reveal-history {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+.award__history-card {
+  position: relative;
+  height: 118px;
+  min-width: 0;
+  animation: slot-reveal var(--dur-in) var(--ease-out) both;
+}
+.award__history-card > .award__history-pos {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 150px;
+  height: 100%;
+  font-size: 40px;
+}
+.award__history-card.is-winner > .award__history-pos {
+  box-shadow: inset 0 0 0 3px var(--accent), var(--luxe-pill-shadow);
+}
+.award__history-card > .award__history-body {
+  position: absolute;
+  left: 132px;
+  right: 0;
+  top: 0;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 26px 0 44px;
+}
+.award__history-card .luxe-avatar {
+  width: 66px;
+  height: 66px;
+  border-width: 5px;
+}
+.award__history-card .luxe-logo-fallback {
+  font-size: 20px;
+}
+.award__history-id {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+.award__history-team {
+  flex: none;
+  font-size: 34px;
+}
+.award__history-pts {
+  flex: none;
+  height: auto;
+  font-size: 36px;
+}
+
+@keyframes slot-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 스포트라이트 ── */
+.award__reveal-focus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 54px;
+  background: var(--luxe-panel);
+  box-shadow: var(--luxe-panel-shadow), var(--luxe-panel-glow);
+}
+.award--reveal[data-rank-revealed='true'] .award__reveal-focus,
+.award--reveal[data-selected-rank] .award__reveal-focus {
+  border-color: rgba(136, 114, 239, 0.7);
+  box-shadow: var(--luxe-panel-shadow), inset 0 0 120px rgba(114, 88, 216, 0.16);
+  animation: slot-reveal var(--dur-in) var(--ease-out) both;
+}
+.award__reveal-focus.is-team-revealed {
+  gap: 18px;
+}
+.award__focus-rank,
+.award__focus-complete {
+  font-family: var(--font-num);
+  font-weight: 800;
+  font-size: 190px;
+  line-height: 0.86;
+  letter-spacing: 0;
+  background: var(--luxe-numeral-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.award__focus-complete {
+  font-size: 126px;
+}
+.award__focus-wait {
+  font-family: var(--font-num);
+  font-weight: 800;
+  font-size: 190px;
+  line-height: 0.86;
+  letter-spacing: 0;
+  color: var(--fg-mute);
+}
+.award__focus-avatar {
+  width: 150px;
+  height: 150px;
+  border-width: 8px;
+}
+.award__focus-avatar .luxe-logo-fallback {
+  font-size: 42px;
+}
+.award__focus-team {
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #fff;
+}
+.award__focus-points {
+  font-family: var(--font-num);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--luxe-violet-lit);
+}
+.award__focus-guide {
+  margin-top: 30px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg-soft);
+}
+.award__focus-mask {
+  min-width: 68%;
+  margin-top: 34px;
+  padding: 22px 28px;
+  border: 1px solid var(--luxe-panel-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-mute);
+  text-align: center;
+  font-family: var(--font-label);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* ── 우승 ── */
+.award--winner {
+  align-items: center;
+  text-align: center;
+  background:
+    radial-gradient(70% 60% at 50% 46%, rgba(232, 185, 76, 0.1), transparent 62%),
+    var(--luxe-stage);
+}
+.confetti-slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.confetti-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.winner__eyebrow {
+  position: relative;
+  font-family: var(--font-label);
+  font-size: 30px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  color: var(--accent);
+  margin-bottom: 36px;
+}
+.winner__avatar {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  border-width: 12px;
+  margin-bottom: 34px;
+}
+.winner__avatar .luxe-logo-fallback {
+  font-size: 66px;
+}
+.winner__name {
+  position: relative;
+  font-size: 178px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--fg);
+}
+/* 팀 컬러는 이름 아래 얇은 바 하나로만 (텍스트 색으로 쓰지 않는다) */
+.winner__name::after {
+  content: '';
+  display: block;
+  width: 240px;
+  height: 6px;
+  margin: 34px auto 0;
+  background: var(--team);
+}
+.winner__pts {
+  position: relative;
+  margin-top: 30px;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 78px;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--accent);
+}
+
+/* ── 누적 내역 칩 (U33) ──
+ * "총점만 보여 주고 끝나던" 시상에 종목별 성적을 붙인다. 숫자는 리더보드와 같은
+ * 원장 합산(`awardBreakdown`)이라 두 화면이 다른 값을 말할 수 없다.
+ * 스포트라이트·이력 카드·챔피언이 같은 마크업을 쓰고 **크기만** 다르다. */
+.award__breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+.award__breakdown-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--luxe-capsule-bg);
+  color: var(--luxe-capsule-ink);
+}
+/* `.award__breakdown-label`(종목명)은 U80에서 사라졌다 — 이름 대신 동그란 번호가 온다.
+   규칙 정본은 이 파일 아래쪽 "종목 칩" 절의 `.aw__chip-no`다. */
+.award__breakdown-pts {
+  font-family: var(--font-num);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--luxe-capsule-num);
+}
+.award__breakdown-pts.is-empty {
+  color: var(--luxe-capsule-mute);
+}
+/* 스포트라이트 — 총점 바로 아래 한 줄. 이 패널에서 총점 다음가는 위계다. */
+.award__focus-breakdown {
+  margin-top: 22px;
+  max-width: 640px;
+}
+.award__focus-breakdown .award__breakdown-pts {
+  font-size: 26px;
+}
+/* 이력 카드 — 팀명 아래 보조 정보라 한 단 작게, 좌측 정렬 */
+.award__history-breakdown {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.award__history-breakdown .award__breakdown-chip {
+  gap: 6px;
+  padding: 3px 10px;
+}
+.award__history-breakdown .award__breakdown-pts {
+  font-size: 18px;
+}
+/* 챔피언 — 총점 아래. 화면에 팀이 하나뿐이라 가장 크게 둔다. */
+.winner__breakdown {
+  position: relative;
+  margin-top: 26px;
+  max-width: 860px;
+}
+.winner__breakdown .award__breakdown-pts {
+  font-size: 30px;
+}
+
+/* ── 종목 칩: 동그란 번호 + 값 (U80) ────────────────────────────────────
+ * 1부는 언제나 `P1_EVENT_ORDER` 네 종목이 이 순서로 고정이다 — ①컬링 ②신문지 달리기
+ * ③끈끈이 낚시 ④몸으로 말해요. 매 방송 같은 이름 네 개가 줄을 채우니 정작 읽어야 할
+ * 숫자가 묻혔다(사용자 지적). 순서가 이름을 대신하므로 화면에는 번호와 값만 둔다.
+ * 이름은 `title`·`aria-label`에 남아 hover·스크린리더·`toText()` 잠금 검증이 그대로 본다.
+ *
+ * 마커는 글리프(①)가 아니라 **CSS 링 + 숫자**다. 유니코드 원문자는 폰트마다 있고 없고가
+ * 갈려 프로젝터에서 두부(□)가 될 수 있고, 크기·굵기를 방송 급수로 못 키운다.
+ * `min-width`/`height`가 같으므로 한 글자는 원, `2부`처럼 두 글자면 짧은 알약이 된다 —
+ * 규칙 하나로 두 모양을 다 만든다.
+ *
+ * 2부는 같은 문법에 **채운 마커**로 층을 가른다. 표에서는 줄을 통째로 써서 1부 네 칸 밑에
+ * 따로 선다. 잠금 중에는 `awardCells()`가 2부 칸을 만들지 않으므로 DOM에도 없다(P3). */
+.aw__chip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.aw__chip-no {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 2px solid var(--luxe-capsule-mute);
+  border-radius: 999px;
+  color: var(--luxe-capsule-sub);
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* 값은 링 바로 옆에 붙는다 — 격자 칸에서 우측 정렬(`.luxe-cell`)을 되돌린다. */
+.aw__chip-val {
+  min-width: 0;
+  text-align: left;
+}
+.aw__chip--p2 {
+  /* 격자(.luxe-cells) 안에서만 뜻이 있다 — 칩 줄(flex)에서는 무시된다 */
+  grid-column: 1 / -1;
+}
+.aw__chip--p2 .aw__chip-no {
+  border-color: transparent;
+  background: var(--luxe-violet-ink);
+  color: #fff;
+}
+/* 보너스(U138) — 종목이 아니므로 링을 굵은 테두리로 갈라 둔다. 2부처럼 면을 채우면
+ * 표에서 두 칸이 같은 층으로 보인다. `±` 한 글자라 1부와 같은 원 모양이 나온다. */
+.aw__chip--bonus .aw__chip-no {
+  border-color: var(--luxe-violet-ink);
+  color: var(--luxe-violet-ink);
+}
+
+/* 표·합산 단계 — 열이 `P1_EVENT_ORDER.length`로 고정이라 1부가 첫 줄을 정확히 채운다. */
+.aw__cells {
+  align-content: center;
+}
+/* 2부 합계와 보너스가 함께 있을 때만 — 둘째 줄을 나눠 써서 셋째 줄이 생기지 않게 한다.
+ * 셋째 줄이 생기면 칩 30px × 3 + 행간 8px × 2 = 106px로 4팀 행 높이(109px)에 닿는다. */
+.aw__cells--pair .aw__chip--p2 {
+  grid-column: 1 / -2;
+}
+/* 스포트라이트·이력·챔피언 칩 줄 — 알약 안쪽이라 좌우 여백을 링 크기에 맞춰 줄인다. */
+.award__breakdown-chip.aw__chip {
+  gap: 9px;
+  padding: 5px 14px 5px 6px;
+}
+.award__focus-breakdown .aw__chip-no {
+  min-width: 34px;
+  height: 34px;
+  font-size: 20px;
+}
+.award__history-breakdown .aw__chip-no {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-width: 2px;
+  font-size: 15px;
+}
+.award__history-breakdown .award__breakdown-chip.aw__chip {
+  gap: 7px;
+  padding: 3px 10px 3px 4px;
+}
+.winner__breakdown .aw__chip-no {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  font-size: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .award__mark,
+  .award__history-card,
+  .award--reveal[data-rank-revealed='true'] .award__reveal-focus,
+  .award--reveal[data-selected-rank] .award__reveal-focus {
+    animation: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════ 엣지 호흡 글로우 (U41 · D7 재구성)
+ *
+ * 가만히 있는 보드 씬(순위·출전 명단·시상)이 심심해 보이지 않게 **가장자리만** 아주 느리게
+ * 호흡시킨다. 화면 중앙(글자·숫자)은 건드리지 않는다.
+ *
+ * ## D7 — 실측에서 비싸서 다시 짰다
+ * 격리 Chromium(소프트웨어 GPU)에서 score 정착 rAF p95가 17 → 33ms로 두 배가 됐다.
+ * `opacity`만 움직여도 **큰 그림자 레이어를 여러 장** 띄우면 합성·재래스터 비용이 그대로 든다.
+ * 세 가지를 바꿨다.
+ *  1) `transform: scale` 제거 — 레이어 크기가 매 프레임 바뀌면 래스터를 다시 뜬다. opacity만.
+ *  2) 레이어 수 축소 — 보드 외곽 1장 + 아바타 링(86px)뿐이다. 행 캡슐 **전폭** inset 그림자
+ *     (4~6장 × 1368px)를 지웠다. 그게 비용의 대부분이었고, 보드 테두리와 겹쳐 보이지도 않았다.
+ *  3) `will-change: opacity` + `contain: paint`로 레이어를 미리 승격하고 재래스터 범위를 가둔다.
+ *
+ * ## 합성 전용이 계약이다
+ * `box-shadow`·`filter` 값을 애니메이션하면 매 프레임 페인트가 다시 돌아, 순위 재정렬 트윈과
+ * 총점 카운트업이 같은 프레임 예산을 두고 다툰다. 그림자는 **사전 렌더된 pseudo-element에
+ * 한 번만** 심고, 애니메이션은 `opacity`뿐이다 — `luxe-glow.test.ts`가 이 규칙을 고정한다.
+ *
+ * ## 마크업을 늘리지 않는다
+ * `renderInto`는 HTML 문자열 비교로 stage 교체를 판단한다. 글로우 때문에 노드를 추가하면
+ * 모든 씬의 캐시 키가 바뀌므로 CSS(`::after`)만으로 끝낸다.
+ *
+ * ## 진입·전환·재정렬과 겹치지 않는다
+ * 보드 진입 모션이 약 1초라 글로우는 그만큼 늦게 시작하고(`animation-delay`), 스팅어가 도는
+ * 동안(`body.is-tx`)과 순위 재정렬 트윈이 도는 동안(`body.is-reordering`)에는 멈춘다.
+ */
+
+:root {
+  /* 피크에서도 텍스트 대비를 낮추지 않는 세기 — 링은 패딩(72px) 안쪽으로만 번진다 */
+  --luxe-glow-line: rgba(209, 219, 240, 0.5);
+  --luxe-glow-soft: rgba(140, 164, 224, 0.22);
+  --luxe-glow-ease: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.luxe-board::after,
+.sb__board::after,
+.rs__panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  /* 레이어를 미리 승격해 두면 매 프레임 재래스터가 아니라 합성만 돈다 (D7) */
+  will-change: opacity;
+  contain: paint;
+}
+
+/* 보드 외곽선 — 링 한 겹 + 안쪽으로만 번지는 부드러운 빛 */
+.luxe-board::after,
+.sb__board::after {
+  box-shadow:
+    inset 0 0 0 1px var(--luxe-glow-line),
+    inset 0 0 44px -10px var(--luxe-glow-soft);
+}
+
+/* 명단 패널 rim — 보드보다 한 단계 여리게. D7에서 번짐 반경을 절반으로 줄이고 spread를 0으로. */
+.rs__panel {
+  position: relative;
+}
+.rs__panel::after {
+  box-shadow: inset 0 0 0 1px var(--luxe-glow-line), inset 0 0 13px 0 var(--luxe-glow-soft);
+}
+
+/* ⚠️ 아바타 링 글로우는 U79에서 **삭제**했다 — 다시 넣지 말 것.
+ *
+ * 의도는 "86px 원 안쪽에 갇힌 2px 팀 색 링"이었지만, `.luxe-avatar`·`.sb__avatar`에
+ * `position: relative`가 없었다. `position: absolute; inset: 0`은 가장 가까운 **배치된**
+ * 조상(`.sb__row-body` / `.luxe-capsule` — 둘 다 absolute)을 기준으로 잡히므로, 실제로는
+ * 행 전폭(1200px+) 상자에 `border-radius: 50%`가 걸린 **거대한 타원**이 그려졌다.
+ * 화면에서는 아바타를 관통해 행 오른쪽까지 휘어 나가는 정체불명의 선으로 보였다
+ * (사용자 지적: "정체불명의 이상한 타원"). `.rs__panel`만 `position: relative`를 받아서
+ * 그쪽 rim은 멀쩡했고, 그래서 오래 눈에 띄지 않았다.
+ *
+ * `position: relative`를 더해 원래 의도대로 되돌리는 길도 있었지만, 그러면 아바타 테두리
+ * 바로 안쪽에 같은 팀 색 링이 한 겹 더 생긴다 — 이미 테두리가 팀 색 신호를 맡고 있어
+ * 중복이다. 지우는 쪽이 화면도 깨끗하고 글로우 레이어 수도 줄어든다(D7 목표와 같은 방향).
+ * 남은 호흡 레이어는 보드 외곽 1장 + 명단 패널 rim뿐이다. */
+
+@keyframes luxe-breathe {
+  0% {
+    opacity: 0.24;
+  }
+  50% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0.24;
+  }
+}
+
+@keyframes luxe-breathe-soft {
+  0% {
+    opacity: 0.14;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0.14;
+  }
+}
+
+.is-luxe-glow .luxe-board::after,
+.is-luxe-glow .sb__board::after {
+  animation: luxe-breathe 5.4s var(--luxe-glow-ease) 1.1s infinite;
+}
+.is-luxe-glow .rs__panel::after {
+  animation: luxe-breathe-soft 4.6s var(--luxe-glow-ease) infinite;
+  /* 패널 진입 모션(`--panel-delay`) 뒤에서 시작하고, 패널마다 위상을 어긋나게 둔다 */
+  animation-delay: calc(1.1s + var(--panel-delay, 0s));
+}
+
+/* 스팅어가 화면을 덮은 동안·순위 재정렬 트윈이 도는 동안에는 멈춘다 (D7) —
+   안 보이거나 다른 애니메이션이 프레임 예산을 쓰는 구간에 합성기를 겹치지 않는다. */
+.is-tx .luxe-board::after,
+.is-tx .sb__board::after,
+.is-tx .rs__panel::after,
+.is-reordering .luxe-board::after,
+.is-reordering .sb__board::after {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luxe-board::after,
+  .sb__board::after,
+  .rs__panel::after {
+    animation: none;
+    opacity: 0.3;
+    will-change: auto;
+  }
+}
+
+/* ══════════════════════════════ 오피셜 배지 아바타 링 통일 (U79)
+ * 공용 규칙(`.luxe-avatar:has(.team-badge)`, 특이도 0,2,0)은 배지 아바타의 링을 2px
+ * hairline으로 낮춘다. 그런데 씬별 지름 규칙(`.rs__panel .luxe-avatar` 등)도 특이도가
+ * 같고 파일 **뒤쪽**에 있어 순서로 이겨 버렸다 — 명단은 5px, 시상 우승 아바타는 12px
+ * 링이 배지 자신의 rim 위에 겹쳐 이중 테두리가 됐고, 로고가 링 안쪽으로 더 밀려
+ * 작아 보이는 원인이기도 했다.
+ *
+ * 배지 판정만 다시 걸어 마지막에 덮는다. 지름은 그대로 두고 **링 두께만** 통일한다 —
+ * 씬별 크기 위계(명단 64 · 시상 240 …)는 정보 위계라 건드리지 않는다.
+ * 사용자가 올린 임의 그림(배지 아님)은 팀 색 링이 유일한 팀 신호라 여전히 두껍다. */
+.rs__panel .luxe-avatar:has(.team-badge),
+.rs__grid[data-cols='3'] .rs__panel .luxe-avatar:has(.team-badge),
+.rs__panel--duel .luxe-avatar:has(.team-badge),
+.award__history-card .luxe-avatar:has(.team-badge),
+.award__focus-avatar:has(.team-badge),
+.winner__avatar:has(.team-badge),
+.luxe-rows[data-teams='5'] .luxe-avatar:has(.team-badge),
+.sb__rows[data-teams='5'] .sb__avatar:has(.team-badge),
+.luxe-rows[data-teams='6'] .luxe-avatar:has(.team-badge),
+.sb__rows[data-teams='6'] .sb__avatar:has(.team-badge) {
+  border-width: 2px;
+}

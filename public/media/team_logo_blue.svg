@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Blue team mark</title>
+  <circle cx="256" cy="256" r="232" fill="#3b82c4"/>
+  <circle cx="256" cy="256" r="205" fill="none" stroke="#dcecff" stroke-width="8"/>
+  <text x="256" y="326" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="216" font-weight="900" letter-spacing="0">B</text>
+</svg>

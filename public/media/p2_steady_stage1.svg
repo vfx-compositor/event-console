@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">2부 1단계 안내</title>
+  <desc id="desc">2부 1단계 시작 전 대기 화면</desc>
+  <rect width="1920" height="1080" fill="#0b1423"/>
+  <rect x="112" y="112" width="1696" height="856" fill="none" stroke="#33445c" stroke-width="2"/>
+  <text x="960" y="316" text-anchor="middle" fill="#d9b65d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" letter-spacing="0">PART 2</text>
+  <text x="960" y="586" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="168" font-weight="800" letter-spacing="0">2부 · 1단계</text>
+  <line x1="684" y1="650" x2="1236" y2="650" stroke="#d9b65d" stroke-width="3"/>
+  <text x="960" y="732" text-anchor="middle" fill="#cbd3df" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" letter-spacing="0">진행자의 안내를 기다려 주세요</text>
+  <text x="144" y="916" fill="#d9b65d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="700" letter-spacing="0">Event Console</text>
+</svg>

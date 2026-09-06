@@ -1,0 +1,283 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 디자인 토큰 — 방송 중계 그래픽 (design/BROADCAST_DESIGN_SYSTEM.md §3)
+ *
+ * 원칙 (실제 방송 그래픽 캡처 cap_01~25에서 추출):
+ *   ① 무채 베이스(딥 네이비~검정 + 화이트) + 액센트 **1색**.
+ *      1부 = 골드, 2부 = 크림슨. 구조는 그대로, --accent 계열만 스왑.
+ *   ② 팀 컬러는 좌측 4~6px 바 / 점 / 배지 테두리에만. 면 채색·텍스트색 금지.
+ *   ③ 라운드는 거의 0 (카드 4px, 칩 2px). 그림자는 1단.
+ *   ④ 숫자 = Barlow Condensed 볼드 + tabular. 라벨 = Inter 소형 대문자.
+ *      한글 = Pretendard, 자간 0 또는 음수.
+ *   ⑤ 그라디언트 배경 전면 채색·글로우·네온 금지.
+ *
+ * 폰트는 전부 로컬 번들(OFL). 외부 네트워크 요청 0 — P1 오프라인 완결.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('../fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Inter Variable';
+  src: url('../fonts/InterVariable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('../fonts/BarlowCondensed-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('../fonts/BarlowCondensed-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('../fonts/BarlowCondensed-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  /* ───────────────────────── 면 (무채 베이스) ───────────────────────── */
+  --bg: #080c14;
+  --bg-deep: #04070d;
+  --bg-void: #04070d;
+
+  --surface: #0f1725; /* 스코어바·카드 기본 */
+  --surface-2: #172032; /* 카드 위 중첩 서브바 */
+  --surface-3: #1e2941; /* 입력·호버 */
+  --surface-flat: #0b1120; /* 불투명 바(세이프존 하단) */
+
+  /* 방송 관례: 밝은 영상 위 정보는 85%+ 검정 면. 글래스 블러 금지. */
+  --scrim: rgba(6, 10, 18, 0.88);
+  --scrim-strong: rgba(4, 7, 13, 0.94);
+
+  --line: rgba(255, 255, 255, 0.09);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --line-hair: #253046;
+
+  /* ───────────────────────── 글자 ───────────────────────── */
+  --fg: #ffffff;
+  --fg-soft: #dfe5ee;
+  --fg-dim: #94a0b3;
+  --fg-mute: #7a879c;
+
+  /* ───────────────────── 액센트 1색 (1부 = 골드) ───────────────────── */
+  --accent: #e8b94c;
+  --accent-soft: #f2d089;
+  --accent-deep: #a97f22;
+  --accent-ink: #14100a; /* 액센트 면 위 텍스트 */
+  --accent-a12: rgba(232, 185, 76, 0.12);
+  --accent-a20: rgba(232, 185, 76, 0.2);
+  --accent-a40: rgba(232, 185, 76, 0.4);
+
+  /* 역할 분리색 — 장식으로 쓰지 않는다 */
+  --danger: #e23b3b; /* 위험·속보·LIVE */
+  --danger-soft: #f07d7d;
+  --info: #3b82e2; /* 정보·진행중·단서 */
+  --ok: #3fa877;
+  --warn: #d09a3a;
+  --bad: #e23b3b;
+
+  /* 방송 스위처 관례 — 프로그램(온에어)=적, 프리뷰(대기)=녹 */
+  --pgm: #e23b3b;
+  --pvw: #3fa877;
+
+  /* ───────── 팀 식별색 — 4~6px 바·점·테두리 전용, 면 채색 금지 ─────────
+   * 슬롯 순서는 state.ts `DEFAULT_TEAM_COLORS`와 짝이 맞는다 (U30 · YELLOW/BLUE/RED/GREEN). */
+  --team-1: #ffd45b;
+  --team-2: #3f7fbe;
+  --team-3: #c0453b;
+  --team-4: #3f9b72;
+  --team-5: #8d6bb4;
+  --team-6: #3f9aa8;
+
+  /* ───────────────────────── 타이포 ───────────────────────── */
+  --font: 'Pretendard Variable', 'Apple SD Gothic Neo', 'Noto Sans KR',
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* 숫자 전용 — 컨덴스드 볼드. 한글이 섞이면 Pretendard로 폴백 */
+  --font-num: 'Barlow Condensed', 'Pretendard Variable', 'Apple SD Gothic Neo', sans-serif;
+  /* 영문 라벨·소형 대문자 */
+  --font-label: 'Inter Variable', 'Pretendard Variable', -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* 1920×1080 스테이지 기준 스케일 (§3.1) */
+  --fs-hero: 88px;
+  --fs-score: 48px; /* 중계 스코어바 총점 — U37에서 로고·팀명과 함께 40 → 48px */
+  --fs-label-lg: 22px;
+  --fs-label-sm: 14px;
+  --fs-body: 18px;
+
+  /* ───────────────────────── 형태 ───────────────────────── */
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 4px;
+  --r-chip: 2px;
+  --r-card: 4px;
+
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --shadow-lift: 0 4px 16px rgba(0, 0, 0, 0.55);
+
+  /* ─────────────── 세이프존 (1920×1080 방송 표준) ─────────────── */
+  --safe-x: 96px; /* 액션 세이프 5% */
+  --safe-y: 54px;
+  --inset-badge: 32px; /* 좌상 배지 인셋 24~40px */
+  --scorebar-h: 120px; /* 화면 높이 11% */
+
+  /* ───────────────────────── 모션 ───────────────────────── */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-in: 400ms;
+  --dur-out: 300ms;
+  --dur-num: 600ms;
+
+  /* 배경 모션이 화면에 더할 수 있는 최대 휘도 — 텍스트 대비 보호선 */
+  --ambient-max: 0.06;
+
+  /* ─────────── Broadcast Luxe (2026-09-03 Q1 / U20) ───────────
+   * 리더보드·출전명단·시상 세 씬이 공유하는 보드/캡슐/보라 계열.
+   * 위의 무채 베이스 규칙에 대한 의도된 예외 — design/BROADCAST_DESIGN_SYSTEM.md §예외 참조.
+   */
+
+  --luxe-stage:
+    radial-gradient(circle at 50% 25%, rgba(79, 91, 139, 0.22), transparent 47%),
+    linear-gradient(180deg, #080d17, #03060c);
+  --luxe-scanline: rgba(125, 146, 184, 0.08);
+  --luxe-scanline-step: 162px;
+
+  --luxe-panel: rgba(4, 7, 13, 0.88);
+  --luxe-panel-line: rgba(209, 219, 240, 0.34);
+  --luxe-panel-shadow: 0 50px 150px rgba(0, 0, 0, 0.58);
+  --luxe-panel-glow: inset 0 0 112px rgba(102, 119, 168, 0.05);
+  --luxe-panel-radius: 70px;
+
+  /* 흰 캡슐 — 밝은 면 위에서만 쓰는 잉크 4단 */
+  --luxe-capsule-bg: #f5f6f9;
+  --luxe-capsule-ink: #191c27; /* 팀명 */
+  --luxe-capsule-num: #252936; /* 숫자 */
+  --luxe-capsule-sub: #656b79; /* 보조 라벨 */
+  --luxe-capsule-mute: #9ba1af; /* 미집계·미입력 */
+  --luxe-avatar-bg: #e6e9ef;
+
+  /* 보라 계열 — 구조색(액센트 골드는 1위 표시에만 남는다) */
+  --luxe-violet: #7258d8;
+  --luxe-violet-ink: #7055db; /* 흰 캡슐 위 값 */
+  --luxe-violet-lit: #a794ff; /* 어두운 면 위 값 — 흰 캡슐용 잉크는 여기서 너무 어둡다 */
+  --luxe-numeral-grad: linear-gradient(180deg, #cbbdff, #8872ef);
+  --luxe-head-grad: linear-gradient(90deg, #6b50d7, #856cec);
+  --luxe-pill-grad: linear-gradient(145deg, #8872ef, #6145ca);
+  --luxe-pill-shadow: 0 16px 40px rgba(62, 42, 148, 0.38);
+
+  color-scheme: dark;
+}
+
+/* 2부(수사) — 구조는 동일, 액센트 한 색만 크림슨으로. 정보/단서는 --info(블루)가 맡는다. */
+.mode-p2 {
+  --accent: #e23b3b;
+  --accent-soft: #f28d8d;
+  --accent-deep: #9c2723;
+  --accent-ink: #150605;
+  --accent-a12: rgba(226, 59, 59, 0.12);
+  --accent-a20: rgba(226, 59, 59, 0.2);
+  --accent-a40: rgba(226, 59, 59, 0.4);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font);
+  /* 한글 자간은 0 또는 음수만. 양수는 소형 대문자 라벨 전용(.cap 참조) */
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 타이포 유틸 ────────────────────────────────────────────────────────
+ * .cap  — 소형 대문자 라벨. **양수 자간이 허용되는 유일한 자리** (전역 UI 규칙 예외).
+ * .num  — 컨덴스드 볼드 숫자. 자리수가 흔들리지 않게 tabular 고정.
+ */
+.cap {
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--fs-label-sm);
+  line-height: 1;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 0.9;
+}
+
+/* 시스템 라벨성 초소형 모노 텍스트 (조작 패널 키캡 등) */
+.mono-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- 엠블럼 */
+
+.emblem {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

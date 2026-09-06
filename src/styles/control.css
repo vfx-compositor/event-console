@@ -1,0 +1,4644 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 조작 패널 (control.html) — 노트북 화면(최소 1024, 설계 기준 1280).
+ *
+ * 모델: 방송 스위처 콘솔이되 **손에 닿는 장비**로 읽히게. 각진 1px 박스를 걷어내고
+ * 형태 언어를 필(pill)과 둥근 카드로 통일했다. 출력 화면(display)은 방송 그래픽
+ * 문법(라운드 ≤4px)을 그대로 유지한다 — 두 화면은 목적이 다르다.
+ *   · 조작 패널: 사람이 몇 시간 동안 누르는 물건 → 큰 타겟, 둥근 형태, 넉넉한 여백.
+ *   · 출력 화면: 카메라에 잡히는 그래픽 → 각진 방송 문법.
+ *
+ * 지켜야 할 것
+ *  · 무채 다크 + 액센트 1색. 색은 "지금 어디에 있는지"를 알릴 때만. 새 색 추가 금지.
+ *  · 씬 버튼 = 스위처 버스: 송출 중 = PGM(적), 다음/포커스 = PVW(녹).
+ *    상태는 **테두리가 아니라 좌측 점 + 배경 톤 + 텍스트 태그**로 알린다(색+형태+텍스트).
+ *  · 붉은 채움은 위험 동작(초기화·역분개·잠금 해제) 전용.
+ *  · 여백은 8pt 그리드. 조작 타겟 최소 높이 34px, 반복 입력 행은 44px.
+ *  · 한글 자간은 0 또는 음수. 양수 자간은 라틴 소형 대문자(.cap/.mono-label)만.
+ *  · 1280 폭에서 가로 스크롤 0. 1440/1920에서는 max-width 없이 유동으로 넓어진다.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.control-body {
+  /* ── 조작 패널 전용 형태·간격 토큰 ──────────────────────────────────────
+   * tokens.css의 --r-* 는 출력 화면(방송 그래픽)용 각진 값이라 그대로 두고,
+   * 패널에서만 쓰는 둥근 스케일을 여기에서 따로 정의한다. */
+  --rp: 999px; /* 필 — 버튼·칩·탭·입력 */
+  --r-panel: 18px; /* 랙 패널 */
+  --r-card: 16px; /* 카드 */
+  --r-item: 12px; /* 목록 행·타일 */
+  --r-tile: 14px; /* 씬 타일 */
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* 반복 입력 행(순위·점수)의 고정 행높이 — 눈이 세로로 미끄러지게 */
+  --row-h: 44px;
+
+  /* 조작면만 한 단계 차갑고 선명하게 분리한다. 출력 팔레트는 건드리지 않는다. */
+  --surface-2: #151e2d;
+  --surface-3: #202b3d;
+  --line: rgba(174, 195, 222, 0.11);
+  --line-hair: rgba(174, 195, 222, 0.11);
+
+  background: var(--bg-deep);
+  /* 설계 기준 폭은 1280. 그보다 좁은 화면에서도 잘려서 조작 불가가 되지 않도록
+     열을 minmax로 줄이고, 그래도 모자라면 가로 스크롤을 허용한다. */
+  min-width: 1024px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-size: 13px;
+}
+
+.control-body :where(button) {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.control-body :where(input, select, textarea) {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* 얇고 둥근 스크롤바 — 패널 안쪽 스크롤이 화면을 각지게 자르지 않도록 */
+.col,
+.tabbody,
+.cuesheet__list,
+.ledger__list,
+.snaplist,
+.tabbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.col::-webkit-scrollbar,
+.tabbody::-webkit-scrollbar,
+.cuesheet__list::-webkit-scrollbar,
+.ledger__list::-webkit-scrollbar,
+.snaplist::-webkit-scrollbar {
+  width: 8px;
+}
+.col::-webkit-scrollbar-thumb,
+.tabbody::-webkit-scrollbar-thumb,
+.cuesheet__list::-webkit-scrollbar-thumb,
+.ledger__list::-webkit-scrollbar-thumb,
+.snaplist::-webkit-scrollbar-thumb {
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.14);
+}
+.col::-webkit-scrollbar-thumb:hover,
+.tabbody::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* ════════════════════════════════════════════════════════ 상단 바 (PGM 버스)
+ * 한 줄 정보 위계:
+ *   [ON AIR 씬명] · [phase] · [타이머] ······ [저장/출력/카메라 점] [출력창 열기]
+ */
+
+/* U115 — 좁은 창(1024~1280)에서 상단 바 요소가 서로 겹치던 사고 수정.
+ * 원인: `.topbar__scene`·`.miniplayer`에 붙어 있던 `min-width: 0`이 flex 아이템을
+ * 내용보다 좁게 찌그러뜨리는데, 그 안의 고정 폭 자식(장면명 nowrap 텍스트, 미니플레이어
+ * 트랜스포트 버튼)은 줄어들지 않고 `overflow` 클리핑도 없어 **찌그러진 박스 밖으로 그대로
+ * 그려져** 옆 형제(FREEZE, MEDIA 볼륨 축)를 뒤덮었다. 고정폭 자식이 있는 아이템은
+ * `min-width: 0`을 걷어내 자동 최소 크기(자기 내용만큼)를 되찾게 하고, 대신 상단 바를
+ * 1행/2행으로 나눠 각 행에 `flex-wrap: wrap`을 둔다 — 그래도 한 줄에 다 안 들어가면
+ * 잘리거나 겹치지 않고 다음 줄로 흐른다("두 줄로 내리든" 사용자 지시). */
+.topbar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px var(--sp-5);
+  background: var(--surface);
+  flex: 0 0 auto;
+}
+.topbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  row-gap: 6px;
+  min-height: 30px;
+}
+/* PGM 탈리 스파인 — 큐시트와 종목 행에서도 같은 3px 인셋을 쓴다. */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: var(--sp-2);
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: var(--rp);
+  background: var(--pgm);
+}
+
+.topbar__emblem {
+  width: auto;
+  height: 30px;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+.topbar__emblem .emblem {
+  width: 100%;
+  height: 100%;
+}
+/* Event Console 모노그램 — 출력 화면 세 보드와 같은 마크. 마크가 세로로 긴 편이라
+   폭이 아니라 높이를 채우고 폭은 비율대로 둔다. */
+.topbar__mark {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+}
+
+.topbar__scene {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* U115 — `min-width: 0`이 있으면 이 안의 nowrap 장면명이 줄어들지 않은 채
+     찌그러진 박스 밖으로 그려져 FREEZE 묶음과 겹쳤다. 자동 최소 크기(내용만큼)를
+     그대로 두고, 자리가 모자라면 `.topbar__row`의 wrap이 다음 줄로 내린다. */
+}
+/* ON AIR 램프 — 실제 스위처의 프로그램 탈리 */
+.topbar__scene-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 4px;
+  border-radius: var(--rp);
+  background: var(--pgm);
+  color: #fff;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em; /* 소형 대문자 라벨 */
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.topbar__scene-eyebrow::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: tally-blink 1.2s linear infinite;
+}
+@keyframes tally-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+.topbar__scene-name {
+  font-size: 21px;
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+/* 정보 묶음 사이 구분 — 선이 아니라 점. 각진 요소를 늘리지 않는다 */
+.topbar__sep {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg-mute);
+  opacity: 0.55;
+}
+
+.topbar__spacer {
+  flex: 1;
+  min-width: var(--sp-2);
+}
+
+/* ── PGM FREEZE (U75) ───────────────────────────────────────────────────
+ * 상단 바에서 **떨어져** 앉는다. 볼륨·음악 조작과 붙어 있으면 다른 것을 만지다 화면을
+ * 얼리는 오조작이 난다. 좌우 여백과 얇은 세로 줄로 묶음을 끊는다. */
+.topbar__freeze {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 0 10px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+.freeze-btn {
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid rgba(226, 59, 59, 0.45);
+  border-radius: var(--rp);
+  background: rgba(226, 59, 59, 0.12);
+  color: #f0a3a3;
+  font-size: 12px;
+  font-weight: 750;
+  /* 굵고 짧은 라벨 — 자간은 0 이하 (양수 자간 금지) */
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), border-color 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+.freeze-btn:hover,
+.freeze-btn:focus-visible {
+  border-color: rgba(226, 59, 59, 0.75);
+  background: rgba(226, 59, 59, 0.22);
+  color: #fff;
+}
+.freeze-btn.is-on {
+  border-color: rgba(226, 59, 59, 0.95);
+  background: rgba(226, 59, 59, 0.6);
+  color: #fff;
+}
+/* 두 번째 신호 — 어느 탭을 열어 두고 있어도 눈에 띈다.
+   움직이는 것은 opacity 하나뿐이다(레이아웃·색은 고정이라 상단 바가 흔들리지 않는다). */
+.freeze-badge {
+  padding: 3px 9px;
+  border-radius: var(--rp);
+  background: rgba(226, 59, 59, 0.28);
+  color: #ffd9d9;
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: freeze-pulse 1.1s var(--ease-out) infinite alternate;
+}
+@keyframes freeze-pulse {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .freeze-badge {
+    animation: none;
+  }
+}
+
+.topbar__timer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 14px 5px 12px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 0 0 1px var(--accent-a20);
+  flex: 0 0 auto;
+}
+.topbar__timer::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+.topbar__timer-time {
+  font-family: var(--font-num);
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.topbar__timer-time.is-danger {
+  color: var(--danger-soft);
+}
+.topbar__timer-state {
+  font-size: 11px;
+  color: var(--fg-mute);
+}
+/* 두 축(MEDIA · MUSIC)을 한 묶음으로 세워 둔다 (U45) — 슬라이더와 램프 버튼이 한 짝이다.
+ * U115 — 슬라이더 아래에 램프를 2행으로 쌓던 그리드를 걷어내고 한 줄 인라인으로 바꿨다.
+ * 세로로 쌓으면 상단 바가 좁아질 때 그 2행짜리 축 전체가 옆 형제(미니 플레이어)와
+ * 수직으로도 자리를 다퉈 겹치기 쉬웠다 — 한 줄이면 부족할 때 축 전체가 통째로
+ * `.topbar__row`의 다음 줄로 내려갈 뿐, 축 내부에서 겹치는 일이 없다. */
+.volume-axis {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.volume-slider {
+  display: grid;
+  grid-template-columns: auto 92px 34px;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.volume-slider__label {
+  color: var(--fg-mute);
+  font-size: 9px;
+}
+.volume-slider__input {
+  width: 92px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: ew-resize;
+}
+/* 램프 중 매 프레임 갱신되는 자리 — 폭이 흔들리면 상단 바 전체가 떨린다 */
+.volume-slider__value {
+  color: var(--fg-dim);
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+/* 마스터 볼륨 램프 버튼 (U43) — 걷어낸 전환 스위처 자리 */
+.volume-ramp {
+  display: flex;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.volume-ramp__btn {
+  min-height: 25px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font: 700 10px/1 var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.volume-ramp__btn:hover {
+  border-color: var(--accent-a20);
+  color: var(--fg-dim);
+}
+.volume-ramp__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* 지금 이 목표로 가는 중 — 색·테두리·글자 굵기 세 신호가 함께 바뀐다 */
+.volume-ramp__btn.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-2));
+  color: var(--fg);
+  font-weight: 800;
+}
+/*
+ * 출력 소리 잠김 대형 경고 (U48) — 작은 상태 점 하나로는 놓친다.
+ * 상시 빨강, "지금 나가야 할 소리가 있는" 동안은 한 단계 더 강조한다.
+ */
+.audio-lock-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 340px;
+  padding: 5px 11px;
+  border: 1px solid var(--bad, #e5484d);
+  border-radius: var(--rp);
+  background: color-mix(in srgb, var(--bad, #e5484d) 22%, var(--bg-2));
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 0 1 auto;
+  cursor: default;
+}
+.audio-lock-banner__mark {
+  font-size: 15px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.audio-lock-banner__body {
+  display: grid;
+  min-width: 0;
+}
+.audio-lock-banner__title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+/* 한 줄 요약만 보이고 전문은 hover·focus 툴팁이 연다 — 상단 바가 문단으로 부풀면 안 된다 */
+.audio-lock-banner__hint {
+  font-size: 10px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-lock-banner.is-critical {
+  border-color: var(--bad, #e5484d);
+  background: var(--bad, #e5484d);
+  animation: audio-lock-pulse 1.6s ease-in-out infinite;
+}
+.audio-lock-banner.is-critical .audio-lock-banner__hint {
+  color: rgba(255, 255, 255, 0.86);
+}
+@keyframes audio-lock-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad, #e5484d) 70%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--bad, #e5484d) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .audio-lock-banner.is-critical {
+    animation: none;
+  }
+}
+
+/* 상단 미니 플레이어 (U49) — 곡 이름이 길어져도 상단 바가 흔들리지 않게 nowrap + 말줄임 */
+.miniplayer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 300px;
+  padding: 4px 8px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  flex: 0 1 auto;
+  /* U115 — `min-width: 0`을 걷어냈다. 곡 제목은 여전히 `.miniplayer__now`의
+     자체 `min-width: 0`(그리드)으로 줄어들어 말줄임 처리되지만, 트랜스포트
+     버튼·이어재생 배지처럼 줄어들지 않는 자식이 있는 이 박스 자체는 그 내용의
+     자동 최소 크기 아래로는 찌그러지지 않는다 — 찌그러지면 그 버튼들이 박스
+     밖으로 그려져 MEDIA 볼륨 축 위에 겹쳤다(U115 실사고). 모자라면 `.topbar__row`가
+     다음 줄로 내린다. */
+}
+.miniplayer__now {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'dot title' 'dot time';
+  align-items: center;
+  column-gap: 6px;
+}
+.miniplayer__dot {
+  grid-area: dot;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--fg-mute);
+}
+.miniplayer__dot.is-on {
+  color: var(--accent);
+}
+.miniplayer__title {
+  grid-area: title;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.miniplayer__time {
+  grid-area: time;
+  font-size: 9px;
+  color: var(--fg-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.miniplayer__transport {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.miniplayer__btn {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.miniplayer__btn:hover {
+  border-color: var(--line-2);
+  color: var(--fg);
+}
+.miniplayer__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.miniplayer__mode {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  background: var(--bg-2);
+  color: var(--fg-dim);
+  font-size: 10px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.miniplayer__mode:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 후반 탭 상단 잠금 바 (U49 — 런처 퀵 카드에서 옮겨 온 자리) */
+.p2-lockbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--rp);
+  background: var(--bg-2);
+  white-space: nowrap;
+}
+.p2-lockbar__label {
+  color: var(--fg-mute);
+  font-size: 10px;
+  margin-right: auto;
+}
+
+.topbar__status {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px 4px;
+  border-radius: var(--rp);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line);
+  white-space: nowrap;
+}
+.chip--phase,
+.chip--gold {
+  color: var(--accent);
+  background: var(--accent-a12);
+  box-shadow: inset 0 0 0 1px var(--accent-a40);
+}
+.chip--warn {
+  color: var(--danger-soft);
+  background: rgba(226, 59, 59, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(226, 59, 59, 0.5);
+}
+/* 되감기 중 — 경고보다 한 단계 진하게. "지금 나가는 그림이 라이브가 아니다"는 사실이
+ * 상단 바에서 제일 먼저 읽혀야 한다 (Q5). */
+.chip--replay {
+  color: #ffd7d7;
+  background: rgba(226, 59, 59, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(226, 59, 59, 0.7);
+  font-weight: 700;
+}
+
+/* 상태 점 — 작고 조용하게. 점만 색을 갖고 라벨은 항상 같은 톤. */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 4px;
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  cursor: default;
+  white-space: nowrap;
+  border: none;
+  font: inherit;
+  line-height: inherit;
+}
+.status-dot--action {
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.status-dot--action::after {
+  content: '›';
+  color: var(--accent);
+  font: 700 14px/1 var(--font-num);
+}
+.status-dot--action:hover,
+.status-dot--action:focus-visible {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
+}
+.status-dot__mark {
+  font-size: 8px;
+  line-height: 1;
+}
+.status-dot.is-on .status-dot__mark {
+  color: var(--ok);
+}
+.status-dot.is-off .status-dot__mark {
+  color: var(--bad);
+}
+.status-dot.is-unknown .status-dot__mark {
+  color: var(--fg-mute);
+}
+.status-dot.is-off {
+  color: var(--danger-soft);
+  background: rgba(226, 59, 59, 0.1);
+}
+.status-dot__label {
+  color: inherit;
+}
+
+/* ════════════════════════════════════════════════════════ 3열 레이아웃
+ * 좌: 씬 런처 + 큐시트 / 중: 탭 / 우: 원장(접을 수 있음)
+ * 넓은 화면에서 중앙을 max-width로 묶지 않는다 — 종목 카드가 넓어지는 편이 낫다.
+ */
+
+/* 좌: 씬 런처 + 큐시트 / 중: 탭. 우측 상시 원장 레일은 [원장] 탭으로 내려갔고(U34),
+ * 그 폭은 전부 중앙 종목 카드가 가져간다. */
+.main {
+  flex: 1;
+  display: grid;
+  /* U134 (09-05 12:2x 사용자 "좌측 사이드가 너무 비좁은 느낌 … 어려우면 1.1배") — 라이브 중이라
+   * 드래그 리사이즈 대신 폭만 1.1배(252→277, 300→330). 내부 구성요소는 252px 최소 폭에 맞춰
+   * 접히도록 만들어져 있어 넓어져도 줄바꿈·잘림이 새로 생기지 않는다.
+   *
+   * U137 (09-06 "드래그 리사이즈 -> 진행해") — 가운데 12px 트랙이 **옛 gap 자리**다. 열 사이
+   * 간격을 그대로 12px로 두면서 그 띠를 구분선(`.col-resizer`)이 차지하게 만든 것 —
+   * `column-gap`을 남긴 채 트랙을 더하면 간격이 24px로 벌어져 배치가 바뀐다.
+   *
+   * `var(--sidebar-w, minmax(277px, 330px))`: 사용자가 실제로 끌었을 때만 `.main`의 inline
+   * 스타일로 `--sidebar-w`가 서고, 그 전에는 폴백인 **범위**가 그대로 산다(화면이 좁으면 277,
+   * 넓으면 330까지). 저장값 없음을 300px 같은 한 숫자로 채우면 이 반응형이 죽는다. */
+  grid-template-columns: var(--sidebar-w, minmax(277px, 330px)) 12px minmax(0, 1fr);
+  column-gap: 0;
+  row-gap: var(--sp-3);
+  padding: var(--sp-3);
+  min-height: 0;
+  background: var(--bg-deep);
+}
+
+/* ── 좌측 열 폭 구분선 (U137) ──────────────────────────────────
+ * 히트 영역은 12px 띠 전체(보이는 선보다 넉넉히), 보이는 것은 가운데 1px 선뿐이다.
+ * 평소에는 배경과 거의 같은 톤이고 hover/active/focus에서만 또렷해진다 — 상시로 밝으면
+ * 좌·중앙을 가르는 구조선처럼 읽혀 화면이 시끄러워진다. */
+.col-resizer {
+  align-self: stretch;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 2px;
+}
+.col-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--line);
+  transition: background 0.14s var(--ease-out), width 0.14s var(--ease-out);
+}
+.col-resizer:hover::before,
+.col-resizer:active::before {
+  width: 2px;
+  background: var(--line-strong);
+}
+.col-resizer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.col-resizer:focus-visible::before {
+  width: 2px;
+  background: var(--accent);
+}
+
+/* 드래그하는 동안 창 전체 (U137). 커서가 지나가는 요소마다 바뀌지 않게 고정하고, 텍스트가
+ * 끌려 선택되는 것을 막는다. `<iframe>`(PGM 모니터)과 영상은 pointer 이벤트를 삼켜 드래그를
+ * 끊으므로 잡고 있는 동안만 통과시킨다. */
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.is-resizing iframe,
+body.is-resizing video {
+  pointer-events: none;
+}
+
+.col {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.col--center {
+  overflow: hidden;
+  gap: 10px;
+}
+/* 좌측 열은 통째로 스크롤시키지 않는다 — 그러면 [다음] 버튼이 화면 밖으로 밀려난다.
+ * 런처는 제 높이를 갖고, 큐시트가 남은 높이를 채운 뒤 목록만 안에서 스크롤한다. */
+/* 재렌더에서 살아남는 뼈대의 감싸개 (U72) — 배치에는 아무 영향을 주지 않는다.
+   `display: contents`라 자식이 곧바로 `.shell`·`.col--left`의 flex 아이템이 된다. */
+.shell__slot {
+  display: contents;
+}
+
+.col--left {
+  overflow: hidden;
+}
+.col--left .pgm-monitor {
+  flex: 0 0 auto;
+}
+
+/* ── PGM 모니터 (U72) ───────────────────────────────────────────────────
+ * 출력에 나가는 그림을 조작 화면 안에서 본다. **출력 창이 아니다** — 라벨과 연결 상태를
+ * 함께 띄우고, 클릭은 아예 먹지 않게 해서 여기를 조작 대상으로 오해하지 않게 한다. */
+.pgm-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+}
+.pgm-monitor__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pgm-monitor__label {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(226, 59, 59, 0.2);
+  color: #f0a3a3;
+  font-size: 10px;
+  font-weight: 700;
+}
+.pgm-monitor__status {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-mute);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.pgm-monitor__status.is-on {
+  color: var(--fg-dim);
+}
+.pgm-monitor__toggle {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font-size: 10.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.pgm-monitor__toggle:hover,
+.pgm-monitor__toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.pgm-monitor__body {
+  min-width: 0;
+}
+/* 16:9 고정 — 열 폭에 맞춰 높이가 따라온다. 안쪽 스케일러가 1920×1080을 알아서 줄이므로
+   바깥에서 transform: scale()로 감싸지 않는다(폰트 렌더링·레이아웃이 무너진다). */
+.pgm-monitor__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: var(--r-tile);
+  background: #000;
+  /* 조작 대상이 아니다 — 클릭·드래그·포커스 어느 것도 이 안으로 들어가지 않는다 */
+  pointer-events: none;
+}
+.pgm-monitor__frame[hidden] {
+  display: none;
+}
+.pgm-monitor.is-collapsed .pgm-monitor__body {
+  display: none;
+}
+.col--left .launcher {
+  flex: 0 0 auto;
+}
+.col--left .cuesheet {
+  flex: 1 1 auto;
+  min-height: 180px;
+}
+
+/* 랙 유닛 라벨 — 앞에 액센트 눈금 하나 (양끝을 둥글린 필) */
+.panel__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  /* 한글 라벨 — 자간 0 (양수 자간은 라틴 소형 대문자 전용) */
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+}
+.panel__title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: var(--rp);
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.section__title {
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-soft);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ════════════════════════════════════════════════════════ 랙 패널 공통 */
+
+.launcher,
+.cuesheet {
+  background: var(--surface);
+  border-radius: var(--r-panel);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* ── 씬 런처 = 스위처 버스 ──────────────────────────────────────────────
+ * 상태는 테두리가 아니라 좌측 점 + 배경 톤 + 대문자 태그로 알린다.
+ *   송출 중(PGM) = 적색 점 + 붉은 톤 + "PGM"
+ *   포커스/호버(PVW) = 녹색 점 + 녹색 톤 — 누르면 나갈 자리를 미리 알린다
+ */
+
+/* ── 화면 암전 (U65) ────────────────────────────────────────────────────
+ * 런처 최상단, 전환 방식 줄보다 위. 사고가 났을 때 제일 먼저 찾는 손잡이라 묻히면 안 된다.
+ * 상태는 **색(적색 톤) + 형태(좌측 인셋 바 · ■/●) + 텍스트(암전/해제)** 셋으로 동시에 알린다.
+ * 남은 초 칸은 폭을 미리 잡아 둔다 — 숫자가 들고 나며 버튼이 흔들리면 눈이 그리로 끌려간다. */
+.launcher__blackout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(226, 59, 59, 0.32);
+  border-radius: var(--r-tile);
+  background: rgba(226, 59, 59, 0.08);
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  /* 한글 라벨 — 자간 0 이하 (양수 자간 금지) */
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), border-color 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+.launcher__blackout:hover,
+.launcher__blackout:focus-visible {
+  border-color: rgba(226, 59, 59, 0.55);
+  background: rgba(226, 59, 59, 0.16);
+  color: var(--fg);
+}
+.launcher__blackout.is-on {
+  border-color: rgba(226, 59, 59, 0.85);
+  background: rgba(226, 59, 59, 0.28);
+  color: var(--fg);
+  box-shadow: inset 4px 0 0 rgba(226, 59, 59, 0.95);
+}
+.launcher__blackout-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.launcher__blackout-count {
+  flex: 0 0 auto;
+  min-width: 34px;
+  color: var(--accent);
+  font-family: var(--font-num);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+/* 램프가 도는 동안만 숨을 쉰다 — opacity만 움직인다(합성 전용, 레이아웃 영향 0) */
+.launcher__blackout.is-ramping .launcher__blackout-count {
+  animation: blackout-count-pulse 1s var(--ease-out) infinite alternate;
+}
+@keyframes blackout-count-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .launcher__blackout.is-ramping .launcher__blackout-count {
+    animation: none;
+  }
+}
+
+/* minmax(0, …)이 없으면 타일 내용(라벨+태그+키캡)이 min-content로 열을 밀어내 패널 밖으로 넘친다 */
+.launcher__transition {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+  background: rgba(0, 0, 0, 0.2);
+}
+.launcher__transition-label {
+  color: var(--fg-mute);
+  font-size: 10px;
+}
+.launcher__transition-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.launcher__transition-btn {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.launcher__transition-btn.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-2));
+  color: var(--fg);
+}
+
+.launcher__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+/* ── 대결팀 보더 (U14 · 시안 A · Split Color Tiles) ─────────────────────
+ * 타일 절반씩 좌·우 팀 색 면 → 누르기 전에 출력 보더의 방향이 그대로 보인다.
+ * 색 면은 배경일 뿐이라 팀명은 항상 본문색으로 얹어 대비를 지킨다. */
+.vsbox {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+  background: rgba(0, 0, 0, 0.2);
+}
+/* 머리 전체가 접기 토글이다 (U57) — 상태 칩은 접힌 채로도 계속 읽혀야 하므로 안에 남는다.
+ * 칩이 버튼 안이라 따로 포커스를 받지 않고, 접힘 여부는 ▾/▸ 형태 + aria-expanded로 알린다. */
+.vsbox__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vsbox__toggle {
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.vsbox__toggle:hover .vsbox__title,
+.vsbox__toggle:focus-visible .vsbox__title {
+  color: var(--fg);
+}
+.vsbox__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.vsbox__caret {
+  flex: none;
+  width: 9px;
+  color: var(--fg-mute);
+  font-size: 9px;
+  line-height: 1;
+}
+/* 상태 칩은 머리 오른쪽 끝으로 민다 — 예전 space-between과 같은 자리 */
+.vsbox__status {
+  margin-left: auto;
+}
+/* 접히는 본문 = 타일 + 도구 한 줄. `display: grid`가 작성자 스타일이라 UA의
+ * `[hidden] { display: none }`보다 우선순위가 높아 `hidden`을 얹어도 무시된다
+ * (U130 — 접기를 눌러도 본문이 그대로 보이던 결함). `.tabbar__more[hidden]`과
+ * 같은 규율로 여기서 명시적으로 다시 눌러 준다. */
+.vsbox__body {
+  display: grid;
+  gap: 6px;
+}
+.vsbox__body[hidden] {
+  display: none;
+}
+.vsbox.is-collapsed {
+  gap: 0;
+}
+.vsbox__title {
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 700;
+}
+.vsbox__status {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-mute);
+  font-size: 10px;
+  font-weight: 650;
+}
+.vsbox__status.is-on {
+  color: var(--fg);
+}
+/* 팀 6이면 조합이 15개까지 늘어난다 — 런처가 세로로 팽창해 씬 버튼을 밀어내지 않게
+ * 여기서만 스크롤한다(6타일 ≈ 3행이 기본, 그 이상은 그룹 안에서 굴린다). */
+.vsbox__pairs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  max-height: 154px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.vspair {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.vspair:hover {
+  border-color: rgba(174, 195, 222, 0.4);
+}
+.vspair:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.vspair__face {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+.vspair__face--l {
+  left: 0;
+  background: color-mix(in srgb, var(--vs-l) 26%, transparent);
+}
+.vspair__face--r {
+  right: 0;
+  background: color-mix(in srgb, var(--vs-r) 26%, transparent);
+}
+/* ── 좌·우 절반 판정 면 (U63) ──────────────────────────────────────────
+ * 좌측 절반 = 보더만, 우측 절반 = 보더 + 매치 영상. 어느 쪽을 누르는지가 곧 의도이므로
+ * **가리키고 있는 절반만** 밝아져야 한다 — 타일 전체가 밝아지면 경계가 안 보이고,
+ * 리허설에서 실수로 송출에 영상이 나간다. 가운데 실선이 경계를 상시로 알린다. */
+.vspair__half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 50%;
+  background: transparent;
+  transition: background 0.12s var(--ease-out);
+}
+.vspair__half--l {
+  left: 0;
+}
+.vspair__half--r {
+  right: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.vspair__half:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+/* 우측 절반을 가리키면 ▶ 표식도 같이 밝아진다 — "여기를 누르면 재생"을 형태로 잇는다 */
+.vspair__half--r:hover ~ .vspair__vid {
+  color: rgba(255, 255, 255, 0.95);
+  transform: scale(1.15);
+}
+/* 키보드는 좌표가 없다 — 포커스 링만 두고 절반 강조는 하지 않는다(Shift+Enter가 재생) */
+.vspair:focus-visible .vspair__half {
+  background: transparent;
+}
+.vspair__text {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  min-height: 32px;
+}
+.vspair__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-dim);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+.vspair__name--l {
+  text-align: left;
+}
+.vspair__name--r {
+  text-align: right;
+}
+.vspair__vs {
+  color: var(--fg-mute);
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 750;
+}
+/* 매치 영상 유무 신호 (U36) — 타일 우상단. 색이 아니라 글자로도 읽힌다 */
+/* 우측 절반 = 재생 절반이므로 표식도 그 절반 안에 둔다 (U63) */
+.vspair__vid {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  z-index: 3;
+  font-size: 8.5px;
+  line-height: 1;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+  transform-origin: 100% 0;
+  transition: color 0.12s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.vspair__vid.is-on {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 선택 상태 = 흰 링(형태) + 짙어진 색 면(색) + '✓ ON'(텍스트) 셋 동시 */
+.vspair.is-on {
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+.vspair.is-on .vspair__face--l {
+  background: color-mix(in srgb, var(--vs-l) 46%, transparent);
+}
+.vspair.is-on .vspair__face--r {
+  background: color-mix(in srgb, var(--vs-r) 46%, transparent);
+}
+.vspair.is-on .vspair__name {
+  color: var(--fg);
+}
+.vspair.is-on .vspair__vs {
+  color: var(--fg);
+}
+.vsbox__tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.vsbox__tool {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vsbox__tool:hover:not(:disabled) {
+  border-color: rgba(174, 195, 222, 0.4);
+  color: var(--fg);
+}
+.vsbox__tool.is-on {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+.vsbox__tool.is-danger {
+  color: var(--danger-soft);
+}
+.vsbox__tool:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* 슬로우 리플레이 (Q5) — 대결팀 보더 바로 아래, 카메라 조작을 한 시선에 둔다.
+ * 버튼 라벨이 [⏪ 리플레이] ↔ [■ 라이브 복귀]로 바뀌므로 폭을 고정하지 않고
+ * 버퍼 칩은 오른쪽에 고정폭으로 붙인다 (라벨 길이 변화가 칩을 밀지 않게). */
+/* ── 리플레이 버튼 (U81) ────────────────────────────────────────────────
+ * 씬 그리드의 한 칸 — [경기 중계] 바로 오른쪽이다. 씬 버튼과 같은 골격(`.scene-btn`)을
+ * 그대로 쓰므로 칸 크기·행 높이가 저절로 맞는다. 다른 것은 색(적색 계열)과 안에 든
+ * 버퍼 칩뿐이다. 옛 별도 박스는 걷어냈다 — 대결 카드 아래 떨어져 있어 중계 중
+ * 시선이 런처 위아래를 오갔다. */
+.scene-btn--replay.is-ready {
+  border-color: rgba(226, 59, 59, 0.5);
+  background: rgba(226, 59, 59, 0.12);
+}
+.scene-btn--replay.is-ready .scene-btn__dot {
+  background: rgba(226, 59, 59, 0.95);
+}
+.scene-btn--replay.is-ready:hover,
+.scene-btn--replay.is-ready:focus-visible {
+  border-color: rgba(226, 59, 59, 0.8);
+}
+/* 못 누르는 상태 — `disabled`가 아니라 흐림 + `aria-disabled`다. 비활성 버튼은 포인터를
+   먹지 않아 안에 든 버퍼 칩의 툴팁이 열리지 않고, 눌러도 이유를 말할 기회가 없다.
+   지금은 눌리고 `toggleReplay()`가 거절 사유를 토스트로 말한다(단축키 R과 같은 경로). */
+.scene-btn--replay.is-off {
+  opacity: 0.45;
+}
+.scene-btn__buffer {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-mute);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scene-btn__buffer.is-on {
+  color: var(--fg-dim);
+}
+
+/* ── 리플레이 반쪽 분할 (U85) ──────────────────────────────────────────
+ * 사용자 지시: "10초는 좀 긴 것 같아. 버튼을 반으로 쪼개고 '지금부터' 버튼을 만들어줘."
+ * 격자의 **한 칸 안에서** 갈린다 — 2열 배치와 아래 줄들이 그대로 유지된다.
+ * 두 반쪽은 진짜 버튼이고 DOM 순서가 왼쪽 → 오른쪽이라 Tab이 보이는 순서대로 돈다. */
+.scene-btn-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+/* 반쪽은 폭이 절반이라 점(dot) 자리를 뺀다 — 남겨 두면 라벨이 먼저 잘린다.
+   `.scene-btn`의 2행 골격(label / meta)은 그대로라 높이가 씬 버튼과 어긋나지 않는다. */
+.scene-btn--half {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'label'
+    'meta';
+  padding-left: 10px;
+  padding-right: 8px;
+  font-size: 12px;
+}
+/* 찍어 둔 구간이 있는 동안은 [지금부터]가 "누르면 나간다"는 상태다 — 색 하나로만
+   알리지 않고 라벨 자체가 `⏺ 지금부터` → `▶ 여기까지 n초`로 바뀐다(상태 다중 신호). */
+.scene-btn--mark.is-marked {
+  /* `.scene-btn`이 `border: none`이라 테두리는 inset 그림자로 그린다 (`.scene-btn__state`와 같은 수법) */
+  box-shadow: inset 0 0 0 1px rgba(226, 59, 59, 0.85);
+  background: rgba(226, 59, 59, 0.22);
+  color: var(--fg);
+}
+.scene-btn__mark {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+
+/* 사진 배경 토글은 [대기 화면] 버튼 바로 아래 한 줄이다 (U73) — 이 조작이 뜻을 갖는
+ * 씬은 대기 화면 하나뿐이라 그 버튼과 시각적으로 붙여 둔다. 씬 버튼보다 낮고 좁은
+ * 종속 줄로 보이게 만들되, 252px 최소 폭에서도 줄바꿈 없이 한 줄로 접힌다. */
+.launcher__photo-toggle {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 28px;
+  margin-top: -3px;
+  padding: 4px 12px 4px 26px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-tile);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--fg-dim);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), border-color 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+.launcher__photo-toggle:hover,
+.launcher__photo-toggle:focus-visible {
+  border-color: rgba(63, 168, 119, 0.35);
+  background: rgba(63, 168, 119, 0.1);
+  color: var(--fg);
+}
+.launcher__photo-toggle.is-on {
+  border-color: rgba(63, 168, 119, 0.48);
+  background: rgba(63, 168, 119, 0.16);
+  color: var(--fg);
+  box-shadow: inset 3px 0 0 rgba(63, 168, 119, 0.9);
+}
+/* 잠긴 묶음은 한 줄에 하나 — 좁은 열에서 라벨이 LOCK 태그에 밀려 잘리지 않게.
+ * 타일이 넓어지므로 태그·키캡은 같은 줄 오른쪽으로 되돌린다. */
+
+/* 타일은 2행 그리드 — 윗줄은 점+라벨, 아랫줄은 상태 태그와 키캡.
+ * 한 줄에 다 넣으면 300px 열의 2단 그리드에서 '스코어보드'가 '스…'로 잘린다.
+ * 아랫줄이 비면 접히고, 같은 행의 타일끼리는 그리드가 높이를 맞춰 준다. */
+.scene-btn {
+  position: relative;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  grid-template-areas:
+    'dot label'
+    'meta meta';
+  align-items: center;
+  align-content: center;
+  gap: 4px 9px;
+  min-height: 44px;
+  padding: 8px 12px 7px 13px;
+  border-radius: var(--r-tile);
+  border: none;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+/* 대기 화면 버튼은 한 줄을 통째로 쓴다 — 바로 아래 사진 배경 토글이 붙는 자리라
+ * 그 둘이 한 묶음으로 보여야 한다 (U73). 나머지 버튼의 2열 배치는 그대로다. */
+.scene-btn--wide {
+  grid-column: 1 / -1;
+}
+.scene-btn__meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.scene-btn__meta:empty {
+  display: none;
+}
+.scene-btn__dot {
+  grid-area: dot;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
+}
+.scene-btn:hover:not(:disabled),
+.scene-btn:focus-visible:not(:disabled) {
+  background: rgba(63, 168, 119, 0.14);
+  color: var(--fg);
+}
+.scene-btn:hover:not(:disabled) .scene-btn__dot,
+.scene-btn:focus-visible:not(:disabled) .scene-btn__dot {
+  background: var(--pvw);
+}
+/* PGM — 지금 송출 중 */
+.scene-btn.is-active {
+  background: rgba(226, 59, 59, 0.16);
+  color: var(--fg);
+  font-weight: 700;
+}
+.scene-btn.is-active .scene-btn__dot {
+  background: var(--pgm);
+  box-shadow: 0 0 0 3px rgba(226, 59, 59, 0.22);
+}
+.scene-btn.is-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+}
+.scene-btn.is-locked .scene-btn__dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(226, 59, 59, 0.55);
+}
+.scene-btn.is-locked:hover {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--fg-dim);
+}
+
+/* 상태 태그 — 색·형태만으로 끝내지 않고 글자로도 알린다. 비어 있으면 자리를 먹지 않는다. */
+.scene-btn__state {
+  flex: 0 0 auto;
+  padding: 2px 8px 1px;
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em; /* 소형 대문자 라벨 */
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}
+.scene-btn__state:empty {
+  display: none;
+}
+.scene-btn.is-active .scene-btn__state {
+  background: var(--pgm);
+  color: #fff;
+}
+.scene-btn.is-locked .scene-btn__state {
+  background: transparent;
+  color: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px rgba(226, 59, 59, 0.45);
+}
+.scene-btn__label {
+  grid-area: label;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scene-btn__key {
+  flex: 0 0 auto;
+  padding: 1px 6px 0;
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-mute);
+}
+
+
+/* ════════════════════════════════════════════════════════ 큐시트
+ * 현재 스텝만 크게 강조하고 나머지는 확실히 저대비로 내린다.
+ */
+
+.cuesheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* [다음]은 이 패널에서 제일 큰 버튼 — 행사 중 제일 많이 눌린다 */
+.cuesheet__nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.cuesheet__nav .btn--big {
+  padding: 11px 22px 10px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/*
+ * [트랜지션 수정] 토글 (U90) — 켜야만 큐 사이 이음선(`.cue-boundary`)이 나온다.
+ *
+ * 평소의 큐시트는 대본 목록 그대로여야 한다. 이음선이 상시로 끼어 있으면 항목 사이마다
+ * 아이콘 줄이 들어가 대본이 한눈에 들어오지 않는다.
+ */
+.cuesheet__edit-toggle {
+  margin-left: auto;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+/* 접기 토글도 `margin-left: auto`라 둘이 나란히 오면 사이가 벌어진다 — 뒤엣것은 붙인다 */
+.cuesheet__edit-toggle + .cuesheet__fold-toggle {
+  margin-left: 0;
+}
+/* 켜짐은 테두리·바탕·굵기에 문구까지 넷으로 알린다 — 목록 생김새를 통째로 바꾸는 버튼이다 */
+.cuesheet__edit-toggle.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/*
+ * 덕킹 대기 칩 (U44) — [다음 →]을 눌렀는데 2초 동안 아무 일도 없는 것으로 보이면
+ * 운영자가 한 번 더 누른다. 무슨 일이 일어나는지·언제 끝나는지·어떻게 멈추는지를 그 자리에 둔다.
+ */
+.duck-wait {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--accent-a20);
+  border-radius: var(--rp);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-2));
+  white-space: nowrap;
+  overflow: hidden;
+}
+.duck-wait__mark {
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.duck-wait__label {
+  color: var(--fg-dim);
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.duck-wait__count {
+  margin-left: auto;
+  color: var(--fg);
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.duck-wait .btn--tiny {
+  flex: 0 0 auto;
+}
+
+/*
+ * 큐 경계 전환 선택 (U42) — 항목 **사이의 이음선** 위에 얹는다.
+ * 전환은 "이 항목의 속성"이 아니라 "여기서 저기로 넘어가는 방식"이라 자리가 그래야 한다.
+ */
+.cue-boundary {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 0 1px 26px;
+  white-space: nowrap;
+}
+.cue-boundary__line {
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 8px;
+  background: var(--line-2);
+  opacity: 0.7;
+}
+.cue-boundary__btn {
+  min-width: 18px;
+  min-height: 16px;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-mute);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.cue-boundary__btn:hover {
+  border-color: var(--line-2);
+  color: var(--fg-dim);
+}
+.cue-boundary__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* 켜진 것은 색·테두리·바탕 셋으로 알린다 — 기호 하나만 바뀌면 눈에 안 들어온다 */
+.cue-boundary__btn.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--fg);
+}
+/* 대본 고정 경계 (U87) — 값이 못 바뀐다는 것을 색·커서·자물쇠 세 신호로 알린다.
+   `disabled` 대신 `aria-disabled`라서 포커스와 hover는 살아 있다: 왜 못 누르는지 툴팁이
+   그 자리에서 답해야 하고, 못 누르는 버튼일수록 이유가 필요하다.
+   `is-on`은 그대로 둔다 — 고정된 방식이 무엇인지는 평소와 같은 신호로 보여야 한다. */
+.cue-boundary--locked .cue-boundary__line {
+  opacity: 0.35;
+}
+.cue-boundary__btn.is-locked {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.cue-boundary__btn.is-locked:hover {
+  border-color: transparent;
+  color: var(--fg-mute);
+}
+.cue-boundary__btn.is-locked.is-on {
+  opacity: 0.85;
+  border-style: dashed;
+}
+.cue-boundary--locked::after {
+  content: '🔒';
+  flex: 0 0 auto;
+  margin-left: 2px;
+  font-size: 8px;
+  opacity: 0.6;
+}
+
+.cuesheet__reset {
+  align-self: flex-start;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.cuesheet__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cue__btn {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 10px 7px 14px;
+  border-radius: var(--r-item);
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+.cue__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-dim);
+}
+/* 현재 큐 = PGM. 유일하게 크고 밝은 행 */
+.cue.is-current .cue__btn {
+  background: rgba(226, 59, 59, 0.14);
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 13.5px;
+  min-height: var(--row-h);
+}
+.cue.is-current .cue__btn::before,
+.cue.is-current + .cue .cue__btn::before {
+  content: '';
+  position: absolute;
+  left: var(--sp-2);
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: var(--rp);
+}
+.cue.is-current .cue__btn::before {
+  background: var(--pgm);
+}
+/* 바로 다음 큐 = PVW (다음에 나갈 화면) */
+.cue.is-current + .cue .cue__btn:not(:disabled) {
+  color: var(--fg-soft);
+}
+.cue.is-current + .cue .cue__btn::before {
+  background: var(--pvw);
+}
+.cue.is-done .cue__btn {
+  color: var(--fg-mute);
+  opacity: 0.6;
+}
+.cue.is-locked .cue__btn {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.cue__idx {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-mute);
+}
+.cue.is-current .cue__idx {
+  color: var(--danger-soft);
+}
+.cue__label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 매치 영상 큐가 아직 실행될 수 없는 이유를 그 줄에서 알린다 (U36) */
+.cue__flag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(226, 168, 59, 0.18);
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.cue.is-blocked .cue__label {
+  color: var(--fg-mute);
+}
+
+/*
+ * 이음선을 감춘 동안 남는 전환 지정 표시 (U90).
+ *
+ * 줄 오른쪽 끝의 6px 한 점. 큐 버튼 **밖에** 떠 있어야 점을 눌러도 큐가 실행되지 않는다.
+ * 없으면 지정해 둔 사실이 화면에서 통째로 사라져, 리허설에서 걸어 둔 전환이 본 행사에서
+ * 예고 없이 나간다.
+ */
+.cue {
+  position: relative;
+}
+.cue__tdot {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.85;
+  cursor: help;
+}
+.cue__tdot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* 대본 고정 경계(U87)는 운영자가 지정한 것이 아니다 — 속을 비워 형태로 구분한다 */
+.cue__tdot.is-locked {
+  background: transparent;
+  border: 1px solid var(--fg-mute);
+  opacity: 0.7;
+}
+/* 라벨이 점 밑으로 흘러 들어가지 않게 그 줄만 오른쪽을 비운다 */
+.cue.has-tdot .cue__btn {
+  padding-right: 22px;
+}
+
+/*
+ * 1부 접기 (U59) — 1부가 끝난 뒤 끝난 구간을 요약 한 줄로 내린다.
+ *
+ * 표시만 접는다. 큐 번호도 진행 인덱스도 그대로라 접은 채로 1부 항목으로 되돌아갈 수 있다
+ * (`foldPlan`). 그래서 이 구역의 색은 전부 한 단계 죽인 톤이다 — 접힌 것은 "지나간 자리"이지
+ * 새로 눈길을 끌 것이 아니다.
+ */
+.cuesheet__fold-toggle {
+  margin-left: auto;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.cuesheet__fold-toggle.is-on {
+  border-color: var(--accent-a20);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
+}
+/* 접기를 눌러 뒀지만 큐가 아직 1부 안이라 미뤄 둔 상태 — 색·형태·문구 셋으로 알린다 */
+.cuesheet__fold-toggle.is-pending {
+  border-style: dashed;
+  color: var(--fg-mute);
+}
+
+/* 접힌 줄은 자리도 남기지 않는다. 목록이 flex라 UA의 `[hidden]`만 믿지 않고 못을 박는다 */
+.cue--folded[hidden] {
+  display: none;
+}
+
+/* 요약 줄 = 접힌 구간이 있던 자리. 큐 한 줄과 같은 높이 궤도에 얹되 확실히 저대비다 */
+.cue--fold {
+  list-style: none;
+}
+.cuesheet__fold-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 4px 10px 4px 14px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-item);
+  background: transparent;
+  color: var(--fg-mute);
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.82;
+  transition: opacity 0.14s var(--ease-out);
+}
+.cuesheet__fold-btn:hover,
+.cuesheet__fold-btn:focus-visible {
+  opacity: 1;
+}
+.cuesheet__fold-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.cuesheet__fold-mark {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--fg-mute);
+}
+.cuesheet__fold-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════════════════════ 탭 = 세그먼트 필 */
+
+.tabbar {
+  display: flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  align-content: flex-start;
+  flex: 0 0 auto;
+  padding: 5px;
+  border-radius: var(--rp);
+  background: var(--surface);
+  /* 칸이 부족하면 다음 줄로 내린다 — 숨은 가로 스크롤로 마지막 탭을 놓치지 않게 한다. */
+  overflow: visible;
+}
+
+.tabbar__label--compact {
+  display: none;
+}
+.tabbar__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px 7px;
+  border: none;
+  border-radius: var(--rp);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.14s var(--ease-out), background 0.14s var(--ease-out);
+}
+.tabbar__btn:hover {
+  color: var(--fg-dim);
+  background: rgba(255, 255, 255, 0.05);
+}
+.tabbar__btn.is-on {
+  background: var(--surface-3);
+  color: var(--fg);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--accent-a40);
+}
+.tabbar__lock {
+  padding: 2px 7px 1px;
+  border-radius: var(--rp);
+  background: rgba(226, 59, 59, 0.14);
+  color: var(--danger-soft);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.01em; /* 한글 라벨 — 자간 0 */
+}
+.tabbar__btn.is-locked {
+  color: var(--fg-mute);
+}
+.tabbar__btn.is-on.is-locked {
+  color: var(--fg);
+}
+
+/*
+ * 숨긴 탭 묶음 (U78) — 꺽쇠 하나 뒤에 점수 원장·현장 사진·팀 설정을 접어 둔다.
+ *
+ * `display: contents`라 펼쳐도 상자가 생기지 않고 탭들이 같은 flex 줄에 그대로 이어 붙는다.
+ * 그래서 펼침/접힘에 레이아웃 점프가 없다. UA의 `[hidden] { display: none }`은
+ * 작성자 스타일보다 약해 여기서 명시적으로 다시 눌러 준다 — 빼면 접어도 계속 보인다.
+ */
+.tabbar__more {
+  display: contents;
+}
+.tabbar__more[hidden] {
+  display: none;
+}
+.tabbar__more-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 8px 10px 7px;
+  border: none;
+  border-radius: var(--rp);
+  background: transparent;
+  color: var(--fg-mute);
+  font-size: 12.5px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: color 0.14s var(--ease-out), background 0.14s var(--ease-out);
+}
+.tabbar__more-btn:hover {
+  color: var(--fg-dim);
+  background: rgba(255, 255, 255, 0.05);
+}
+.tabbar__more-btn.is-on {
+  color: var(--fg-dim);
+}
+.tabbar__more-caret {
+  display: inline-block;
+  font-size: 14px;
+  transition: transform 0.14s var(--ease-out);
+}
+.tabbar__more-btn.is-on .tabbar__more-caret {
+  transform: rotate(180deg);
+}
+
+/* 폭이 줄어든 경우에도 라벨은 유지하고, 여백만 줄인 뒤 자연스럽게 여러 줄로 감싼다. */
+@media (max-width: 1365px) {
+  .tabbar {
+    gap: 2px;
+  }
+  .tabbar__btn {
+    padding: 8px 11px 7px;
+    gap: 4px;
+  }
+  .tabbar__more-btn {
+    min-width: 26px;
+    padding: 8px 8px 7px;
+  }
+}
+
+.tabbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--r-panel);
+  padding: var(--sp-5);
+}
+.tabpane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.tabpane__hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  line-height: 1.65;
+}
+.tabpane--locked {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 72px var(--sp-5);
+  gap: 10px;
+}
+.locked__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(226, 59, 59, 0.45);
+  color: var(--danger-soft);
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em; /* 소형 대문자 라벨 */
+  text-transform: uppercase;
+}
+.locked__msg {
+  margin: 0;
+  font-size: 15px;
+}
+.locked__sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-mute);
+}
+
+/* ════════════════════════════════════════════════════════ 폼 요소
+ * 버튼은 두 종류뿐 — 고스트(기본) / 솔리드(주요 확정). 붉은 채움은 위험 동작만.
+ * 전부 필. 포커스 링은 outline이라 필 곡률을 그대로 따라간다.
+ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 16px 6px;
+  border-radius: var(--rp);
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg-dim);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out),
+    box-shadow 0.14s var(--ease-out);
+}
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--fg);
+}
+.btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+.btn--primary {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.btn--danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(226, 59, 59, 0.65);
+  color: var(--danger-soft);
+  font-weight: 700;
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  color: #fff;
+}
+/* 고스트도 '누를 수 있는 것'으로는 읽혀야 한다 — 완전 투명은 그냥 글자로 보인다 */
+.btn--ghost {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+}
+.btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.btn--tiny {
+  min-height: 24px;
+  padding: 3px 10px 2px;
+  font-size: 11.5px;
+}
+.btn--big {
+  min-height: var(--row-h);
+  padding: 11px 22px 10px;
+  font-size: 14.5px;
+}
+.btn--block {
+  width: 100%;
+}
+
+.btnrow {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.input {
+  min-height: 34px;
+  padding: 7px 14px 6px;
+  border-radius: var(--rp);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  background: rgba(0, 0, 0, 0.34);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  transition: box-shadow 0.14s var(--ease-out);
+}
+.input:hover {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26);
+}
+.input--num {
+  width: 92px;
+  font-family: var(--font-num);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: right;
+  padding-right: 14px;
+}
+/* 네이티브 화살표를 지우고 같은 톤의 셰브런을 얹는다 (필 안에서 각진 삼각형이 튄다) */
+.input--select {
+  min-width: 92px;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a0b3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.input--color {
+  width: 44px;
+  height: 32px;
+  padding: 3px;
+  border-radius: var(--rp);
+  cursor: pointer;
+}
+.input--color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.input--color::-webkit-color-swatch {
+  border: none;
+  border-radius: var(--rp);
+}
+.input--area {
+  width: 100%;
+  resize: vertical;
+  border-radius: var(--r-card);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.input--file {
+  font-size: 11.5px;
+  border-radius: var(--r-card);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.field--narrow {
+  max-width: 320px;
+}
+.field__label {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  min-width: 96px;
+}
+
+/* 세그먼트 컨트롤 — 트랙(필) 안에서 선택된 알약이 떠 있는 형태 */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.3);
+}
+.seg--wide {
+  margin-bottom: var(--sp-1);
+}
+.seg__btn {
+  padding: 6px 13px 5px;
+  border: none;
+  border-radius: var(--rp);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out);
+}
+.seg__btn:hover {
+  color: var(--fg-dim);
+  background: rgba(255, 255, 255, 0.06);
+}
+.seg__btn.is-on {
+  background: var(--surface-3);
+  color: var(--fg);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--accent-a40);
+}
+
+/* 대본이 못 박아 못 바꾸는 자리 (U88) — `aria-disabled`와 짝이다.
+ * 네이티브 `disabled`를 쓰지 않으므로 hover·포커스가 살아 있고, 그래야 왜 못 누르는지
+ * 툴팁이 뜬다. 흐리게만 하고 마우스 이벤트는 남긴다. */
+.seg__btn.is-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.seg__btn.is-locked:hover {
+  background: transparent;
+  color: var(--fg-dim);
+}
+
+/* ════════════════════════════════════════════════════════ 팀 설정
+ * 카드 테두리 없이 면 + 좌측 팀 마커로만 구분한다.
+ */
+
+/* minmax(0, …)이 없으면 자식(특히 네이티브 input)이 열 폭을 밀어내 옆 카드와 겹친다 */
+.teamgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--sp-2);
+}
+.teamgrid > * {
+  min-width: 0;
+}
+.teamcard {
+  position: relative;
+  border-radius: var(--r-card);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-2);
+  min-width: 0;
+  overflow: hidden;
+}
+/* 팀 식별 — 좌측 4px 마커(양끝 둥글림) */
+.teamcard::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 4px;
+  border-radius: var(--rp);
+  background: var(--team);
+}
+.teamcard__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.teamcard__row > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.teamcard__row .input {
+  flex: 1;
+}
+
+/* ── 로고 드롭존
+   네이티브 <input type=file>은 "Choose File / No file chosen" 라벨 때문에 카드 폭을 넘친다.
+   숨기고 이 커스텀 존이 파일 선택·드래그앤드롭·⌘V 붙여넣기를 모두 받는다. */
+
+.logodrop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-card);
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: border-color 0.14s var(--ease-out), background 0.14s var(--ease-out);
+}
+.logodrop:hover,
+.logodrop:focus-visible {
+  border-color: var(--accent-a40);
+  background: rgba(255, 255, 255, 0.05);
+}
+.logodrop.is-over {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-a12);
+}
+.logodrop__preview {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.34);
+  overflow: hidden;
+}
+.logodrop__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.logodrop__placeholder {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em; /* 소형 대문자 라벨 */
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  line-height: 1;
+}
+.logodrop__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.logodrop__title {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+.logodrop__hint {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fg-mute);
+}
+.logodrop__clear {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  min-height: 22px;
+  padding: 2px 9px 1px;
+}
+
+/* ════════════════════════════════════════════════════════ 종목/단계 카드
+ * 되도록 2열 — 카드가 1열로 늘어지면 한 화면에 종목이 절반밖에 안 들어온다. 다만 **폭을
+ * 보장하지 않는 2열 고정은 쓰지 않는다**(U139).
+ *
+ * 옛 `repeat(2, minmax(0, 1fr))`은 중앙 열이 좁아져도 끝까지 2열을 유지했다. 실측(헤드리스
+ * Chrome, 실제 control.css): 중앙 열 914px(≈1280px 창 + 사이드바)에서 카드가 452px로 눌리고
+ * 2부 줄의 팀 이름 칸이 **0px**이 됐다 — 09-05 15:08 스크린샷의 `YELL…`이 이것이다.
+ * `minmax(0, 1fr)`의 0이 "여기까지 줄어도 좋다"는 허가라 아무 데서도 걸리지 않았다.
+ *
+ * 하한 520px은 실측으로 고른 값이다: 중앙 1074px(1440px 창 + 사이드바 330)에서는 2열이
+ * 그대로 유지되고(카드 532 → 팀 칸 101px), 중앙 914px에서는 스스로 1열로 내려간다.
+ * 1부는 값 입력 열이 더 넓어 자기 규칙(540px)을 따로 쓴다.
+ */
+
+.eventgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr));
+  gap: var(--sp-2) 10px;
+}
+/* 1부만 실제 중앙 가용 폭으로 열 수를 결정한다. 540px 미만 카드 생성 금지. */
+.tabpane--p1 .eventgrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(540px, 100%), 1fr));
+}
+
+/* 최소 운영 폭 1024px에서는 종목명이 상태 제어에 밀려 사라지지 않게 1열로 전환한다. */
+@media (max-width: 1024px) {
+  .eventgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.eventcard {
+  position: relative;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--sp-3) var(--sp-3) var(--sp-4) 22px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+/* 진행 상태는 좌측 마커 하나로만 신호한다 */
+.eventcard::before {
+  content: '';
+  position: absolute;
+  left: var(--sp-2);
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: var(--rp);
+  background: transparent;
+}
+.eventcard.is-live::before {
+  background: var(--accent);
+}
+.eventcard.is-done::before {
+  background: var(--ok);
+}
+.eventcard.is-done {
+  opacity: 0.88;
+}
+.eventcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.eventcard__name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.018em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eventcard__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.eventcard__round {
+  flex: 0 0 auto;
+  padding: 3px 7px 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--rp);
+  color: var(--fg-dim);
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+.eventcard__input-kind {
+  flex: 0 0 auto;
+  padding: 3px 7px 2px;
+  border-radius: var(--rp);
+  background: var(--accent-a12);
+  color: var(--accent-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+.eventcard__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.eventcard__stamp {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em; /* 한글 라벨 — 자간 0 */
+  color: var(--ok);
+}
+
+/* ── 순위·점수 입력 = 결과표 타이포 (출력 스코어보드와 같은 문법)
+ * 행 높이를 44px로 고정한다 — 여섯 줄을 연속으로 찍을 때 눈이 미끄러지게. */
+
+.badge-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1 1 100%;
+}
+
+.p1-value-inputs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.p1-value-inputs .tabpane__hint {
+  grid-column: 1 / -1;
+}
+.p1-value-inputs.is-newspaper {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+}
+.p1-value-input {
+  display: grid;
+  grid-template-columns: 1fr minmax(80px, 0.8fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.p1-newspaper-input {
+  display: grid;
+  gap: 6px;
+}
+.p1-runner-time {
+  display: grid;
+  /* 주자 칸 라벨은 명단 이름으로 바뀌므로(U38) 폭을 52 → 96px로 넓히고 넘치면 잘라낸다 */
+  grid-template-columns: 96px minmax(0, 1fr) 18px;
+  gap: 5px;
+  align-items: center;
+}
+.p1-runner-time__who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+/* 명단에서 온 이름은 기본 라벨보다 한 단계 밝게 — 값이 실제로 반영됐다는 신호 */
+.p1-runner-time__who.is-named {
+  color: var(--fg-dim);
+  font-weight: 700;
+}
+
+/* 팀별 입력도 viewport가 아니라 카드 자체 폭을 따른다. */
+.tabpane--p1 .p1-value-inputs {
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+}
+
+.curling-bracket {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.curling-match {
+  display: grid;
+  grid-template-columns: 72px minmax(100px, 1fr) auto minmax(100px, 1fr) minmax(160px, 1.2fr);
+  align-items: center;
+  gap: var(--sp-2);
+}
+@media (max-width: 1180px) {
+  .curling-match {
+    grid-template-columns: 72px minmax(90px, 1fr) auto minmax(90px, 1fr);
+  }
+  .curling-match > .seg {
+    grid-column: 2 / -1;
+  }
+}
+
+.ranklist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rankrow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* U139 — 8px였다. 2부 줄은 팀 이름·기록·입력칸·[기록]·[정답/오답]·[취소]·점수까지 일곱
+   * 요소가 한 줄에 서므로 간격 2px 차이가 팀 이름 칸 10px이 된다. */
+  gap: 6px;
+  min-height: var(--row-h);
+  padding: 4px 10px 4px 18px;
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.24);
+  min-width: 0;
+}
+.rankrow::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  border-radius: var(--rp);
+  background: var(--team);
+}
+/* U139 — `min-width: 0`이었다. 남는 폭이 0이어도 "합법"이라 팀 이름 칸이 실제로 0px까지
+ * 눌렸고(실측), 그래서 `YELL…`이 나왔다. 이 floor는 그 붕괴를 CSS 층에서 막는 안전망이다.
+ * 6글자(`YELLOW` 48px · 한글 5자 56px, 13px/600)에 말줄임 여유를 더해 84px.
+ * 2열 경계(카드 520px)에서 이 칸이 89px로 잡히므로 floor가 카드를 넘치게 하지 않고,
+ * 그보다 좁아지면 `.eventgrid`가 먼저 1열로 내려간다.
+ * 같은 기준의 다른 자리: `.bonus-strip__team`(88px 고정), `.standings__team`(96px 상한). */
+.rankrow__team {
+  flex: 1 1 auto;
+  min-width: 84px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rankpick {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(38px, 1fr);
+  gap: 3px;
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.rankpick__btn {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--fg-dim);
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rankpick__btn:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.rankpick__btn.is-on {
+  border-color: var(--team);
+  box-shadow: inset 0 0 0 1px var(--team);
+  background: color-mix(in srgb, var(--team) 20%, transparent);
+  color: var(--fg);
+}
+.rankpick__btn.is-clear {
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+.rankrow__pts {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg-soft);
+  /* U139 — 56px였다. `1000점`(5글자)이 tabular-nums 19px에서 52px 안에 들어간다. */
+  min-width: 52px;
+  text-align: right;
+  cursor: help;
+}
+.rankrow__pts.is-zero {
+  color: var(--fg-mute);
+}
+.rankrow__sub {
+  font-size: 12px;
+  display: inline-flex;
+  gap: var(--sp-1);
+  align-items: center;
+  min-width: 92px;
+  color: var(--fg-dim);
+}
+.rankrow__sub.is-ok {
+  color: var(--ok);
+}
+.rankrow__sub.is-ng {
+  color: var(--bad);
+}
+.rankrow__sub.is-wait {
+  color: var(--fg-mute);
+}
+.rankrow__btns {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+/*
+ * 남은 시간 수기 입력 (U135). 줄이 세로로 부풀지 않게 폭을 고정하고 높이는 tiny 버튼에 맞춘다
+ * — 팀 이름(flex:1)이 대신 줄어들며 자리를 내준다.
+ */
+.rankrow__remain {
+  flex: 0 0 auto;
+  /* U139 — 72px였다. `12:34` 5글자가 12px 숫자체에서 64px 안에 여유롭게 들어간다. */
+  width: 64px;
+  min-height: 26px;
+  padding: 3px 8px 2px;
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ════════════════════════════════════════════════════════ 타이머 탭 */
+
+.timerpanel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: var(--sp-5) var(--sp-6);
+  border-radius: var(--r-panel);
+  background: var(--surface-2);
+}
+.timerpanel::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: var(--sp-5);
+  bottom: var(--sp-5);
+  width: 4px;
+  border-radius: var(--rp);
+  background: var(--accent);
+}
+.timerpanel__readout {
+  display: flex;
+  flex-direction: column;
+}
+.timerpanel__time {
+  font-family: var(--font-num);
+  font-size: 66px;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: 0;
+  transition: color 1s ease;
+}
+.timerpanel__time.is-danger {
+  color: var(--danger-soft);
+}
+.timerpanel__state {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em; /* 한글 라벨 — 자간 0 */
+  color: var(--fg-mute);
+  margin-top: var(--sp-2);
+}
+.timerpanel__state.is-run {
+  color: var(--ok);
+}
+.timerpanel__controls {
+  display: flex;
+  gap: 10px;
+}
+
+.presetgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.preset {
+  position: relative;
+  min-height: var(--row-h);
+  padding: 11px 14px 10px;
+  border-radius: var(--rp);
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
+}
+.preset:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+.preset.is-on {
+  background: var(--accent-a12);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--fg);
+  font-weight: 700;
+}
+.preset--custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 5px 6px 5px 16px;
+  cursor: default;
+}
+.preset--custom .field__label {
+  min-width: auto;
+}
+.preset--custom .input--num {
+  width: 78px;
+  min-height: 30px;
+  font-size: 14px;
+}
+
+/* ── U99 타이머 탭 타이포 재조정 (2026-09-05, U67 되돌림)
+ * 사용자 피드백: "'남은 시간' 폰트가 여전히 너무 작아. 숫자는 너무 크고."
+ * U67이 보조 텍스트를 70%로 줄이고 숫자를 88~132px까지 키웠던 것을 전부 되돌린다 —
+ * 안내·상태·프리셋·섹션 제목·버튼은 다른 탭과 동일한 기본 크기를 그대로 쓰고
+ * (해당 선택자들은 스코프 규칙 없이 기본 규칙에 위임), 숫자만 56~84px로 낮춘다.
+ * 대신 숫자 위에 "남은 시간" 라벨을 붙여 무엇을 보고 있는지 명확히 한다.
+ * 자간은 0 또는 음수만 — 양수 자간은 한글에서 금방 엉성해진다. */
+.tabpane--timer .timerpanel {
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-6) var(--sp-6) var(--sp-5) 28px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tabpane--timer .timerpanel__readout {
+  min-width: 0;
+}
+.tabpane--timer .timerpanel__label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--fg-dim);
+  letter-spacing: 0;
+  margin-bottom: 4px;
+}
+/* 남은 시간 — U67보다 낮춘 56~84px. 화면 폭에 따라 늘고, 초가 바뀌어도
+ * 글자폭이 흔들리지 않게 tabular-nums는 유지한다. */
+.tabpane--timer .timerpanel__time {
+  font-size: clamp(56px, 7vw, 84px);
+  font-weight: 700;
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+/* 마지막 10초 레드는 그대로 유지 — 색만 바뀌고 transform/filter 애니메이션은 쓰지 않는다 */
+.tabpane--timer .timerpanel__time.is-danger {
+  color: var(--danger-soft);
+}
+.tabpane--timer .timerpanel__controls {
+  gap: var(--sp-2);
+  padding-bottom: 6px;
+}
+/* U67 레이아웃 유지분 — 리뷰 반영: 사용자 지시는 폰트 크기뿐이므로 배치는 그대로 둔다.
+ * 스코프 없이 그냥 .btn--ghost가 flex 부모 안에서 stretch되면 F4 버튼이 전폭으로 늘어난다. */
+.tabpane--timer > .btn--ghost {
+  align-self: flex-start;
+}
+/* 프리셋은 3열 그리드가 아니라 촘촘한 pill 한 줄 — U67 배치를 그대로 유지 */
+.tabpane--timer .presetgrid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+/* 커스텀 입력은 폭/높이만 컴팩트하게 유지한다 — font-size는 선언하지 않고 기본 규칙(14px)에 위임 */
+.tabpane--timer .preset--custom .input--num {
+  width: 62px;
+  min-height: 24px;
+}
+
+/* ════════════════════════════════════════════════════════ 명단/제시어 */
+
+.rostergrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.rostercard {
+  position: relative;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.rostercard::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 4px;
+  border-radius: var(--rp);
+  background: var(--team);
+}
+.roster-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.roster-preset__label {
+  color: var(--preset);
+}
+.roster-preset__chip {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.roster-preset__chip:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.1);
+}
+.roster-preset__chip.is-on {
+  color: #fff;
+  background: color-mix(in srgb, var(--preset) 36%, var(--surface-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--preset) 72%, white);
+}
+.rostercard .input--area {
+  min-height: 58px;
+  resize: vertical;
+}
+.promptform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.promptform .input {
+  flex: 1;
+}
+
+/* ════════════════════════════════════════════════════════ 보드/시상 탭 */
+
+.suspectgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.suspectcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-h);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 18px;
+  border-radius: var(--r-tile);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.suspectcard::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: var(--rp);
+  background: transparent;
+}
+.suspectcard.is-out {
+  opacity: 0.5;
+}
+.suspectcard.is-out::before {
+  background: var(--danger);
+}
+.suspectcard__code {
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  min-width: 16px;
+}
+.suspectcard .input {
+  width: 84px;
+}
+
+.stepgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 6px;
+}
+.step {
+  min-height: var(--row-h);
+  padding: 12px 14px 11px;
+  border-radius: var(--rp);
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), box-shadow 0.14s var(--ease-out);
+}
+.step:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+.step.is-on {
+  background: var(--accent-a12);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--fg);
+  font-weight: 700;
+}
+.revealrow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.award-rank-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* 미리보기 표 — 출력 결과표와 같은 정렬·타이포 */
+.scoretable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.scoretable th,
+.scoretable td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.scoretable th:nth-child(1),
+.scoretable td:nth-child(1),
+.scoretable th:nth-child(2),
+.scoretable td:nth-child(2) {
+  text-align: left;
+}
+.scoretable thead th {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em; /* 한글 라벨 — 자간 0 */
+  color: var(--fg-mute);
+}
+.scoretable__rank {
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--fg-dim);
+}
+.scoretable__team {
+  position: relative;
+  padding-left: 18px;
+  font-weight: 600;
+}
+.scoretable__team::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  border-radius: var(--rp);
+  background: var(--team);
+}
+.scoretable__total {
+  font-family: var(--font-num);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+/* ════════════════════════════════════════════════════════ 행사 음악 */
+
+.music-tab {
+  position: relative;
+}
+.music-player {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: grid;
+  gap: 9px;
+  padding: 14px 16px;
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--surface-2) 94%, black);
+  box-shadow: inset 3px 0 0 var(--fg-mute), 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+.music-player.is-playing {
+  box-shadow: inset 3px 0 0 var(--accent), 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+.music-player__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.music-player__eyebrow {
+  color: var(--accent);
+  font: 700 9px/1 var(--font-label);
+  letter-spacing: 0.1em;
+}
+.music-player__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+.music-player__section {
+  color: var(--fg-mute);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.music-player__warning {
+  margin: 0;
+  color: var(--danger-soft);
+  font-size: 11px;
+}
+.music-player__range {
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: ew-resize;
+}
+.music-player__transport {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.music-player__play {
+  min-width: 110px;
+}
+.music-player__time {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.music-library {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.music-group {
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+.music-group__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.music-group__summary .chip {
+  margin-left: auto;
+  padding-block: 2px;
+}
+.music-group__rows {
+  display: flex;
+  flex-direction: column;
+  padding: 0 6px 6px;
+}
+.music-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 52px 76px;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 3px 5px 3px 8px;
+  border-radius: 9px;
+}
+.music-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+.music-row.is-active {
+  background: var(--accent-a12);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.music-row__id,
+/* 북마크부터 재생 (U47) — 있는 곡에만 붙는 추가 버튼이라 폭이 흔들리지 않게 고정한다 */
+.music-row__bookmark {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.music-row__duration {
+  color: var(--fg-mute);
+  font-size: 10px;
+}
+.music-row__main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.music-row__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.music-row__warning {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--danger-soft);
+  font-size: 10px;
+}
+.music-tab__empty-note {
+  margin: 4px 0 0;
+  color: var(--fg-mute);
+  font-size: 11px;
+}
+
+/* ════════════════════════════════════════════════════════ 에셋 */
+
+.dropzone {
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-panel);
+  padding: 10px 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+.dropzone.is-over {
+  background: var(--accent-a12);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.photo-drop-surface {
+  position: relative;
+}
+
+.photo-drop-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--accent);
+  border-radius: var(--r-panel);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 800;
+  background: rgba(5, 13, 27, 0.88);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s var(--ease-out);
+}
+
+.photo-drop-surface.is-drop-over::after {
+  opacity: 1;
+}
+.dropzone__icon {
+  width: 24px;
+  height: 2px;
+  border-radius: var(--rp);
+  background: var(--accent);
+  margin-bottom: 2px;
+}
+.dropzone__title {
+  font-size: 12px;
+  font-weight: 700;
+}
+.dropzone__sub {
+  font-size: 10.5px;
+  color: var(--fg-mute);
+}
+
+/* ── 에셋 카드 그리드 (U39) ───────────────────────────────────────────
+ * 콤팩트 행 목록은 18개를 넘어가면서 읽히지 않았다. 카드로 바꾸고 성격별 묶음으로 접는다.
+ * 카드 폭 260px — 1261px 조작 폭(중앙 열 ≈ 940px)에서 3열, 넓은 화면에서 4열이다.
+ */
+
+.assetgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.assetgroup + .assetgroup {
+  margin-top: var(--sp-3);
+}
+.assetgroup__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--r-control);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg-dim);
+  cursor: pointer;
+  text-align: left;
+}
+.assetgroup__head:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+}
+.assetgroup__caret {
+  flex: 0 0 auto;
+  width: 12px;
+  font-size: 10px;
+  color: var(--fg-mute);
+}
+.assetgroup__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.assetgroup__count {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fg-mute);
+}
+
+.assetgrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: var(--sp-2);
+}
+
+.assetcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.assetcard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.assetcard.is-playing {
+  border-color: rgba(226, 59, 59, 0.6);
+  background: rgba(226, 59, 59, 0.1);
+}
+.chip--live {
+  border-color: rgba(226, 59, 59, 0.5);
+  background: rgba(226, 59, 59, 0.16);
+  color: #ffd7d7;
+}
+/* 카드 안 배지는 조용한 톤 — 상태 칩(gold/live)이 눈에 먼저 들어와야 한다 */
+.chip--quiet {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fg-mute);
+}
+
+.assetcard__thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.assetcard__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.assetcard__thumb-empty {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em; /* 소형 대문자 라벨 */
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}
+.assetcard__dur {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  padding: 0 6px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--fg-dim);
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.assetcard__playing {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  padding: 1px 7px;
+  border-radius: var(--rp);
+  background: var(--pgm);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.assetcard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px 8px;
+  min-width: 0;
+}
+.assetcard__badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.assetcard__name-input {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 26px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 3px 9px 2px;
+  text-overflow: ellipsis;
+}
+.assetcard__settings {
+  min-width: 0;
+}
+.assetcard__settings-summary {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--fg-dim);
+  font-size: 10.5px;
+  line-height: 1.35;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.assetcard__settings-summary::marker {
+  color: var(--accent);
+}
+.assetcard__settings[open] .assetcard__settings-summary {
+  margin-bottom: 5px;
+  color: var(--fg);
+}
+.assetcard__fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 6px;
+  border-radius: var(--r-control);
+  background: rgba(0, 0, 0, 0.16);
+}
+.assetcard__fields .field__label {
+  min-width: auto;
+  white-space: nowrap;
+}
+.assetcard__fields .input,
+.assetcard__fields .seg__btn {
+  min-height: 25px;
+  font-size: 10.5px;
+}
+.assetcard__fields .input--select {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.assetcard__actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding: 0 8px 8px;
+}
+.assetcard__actions-play {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.assetcard__actions .btn--tiny {
+  min-height: 25px;
+  padding: 3px 7px;
+  font-size: 10.5px;
+}
+
+.field__inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.input--compact {
+  width: 72px;
+  min-height: 32px;
+  padding: 5px 8px;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+.field__unit {
+  color: var(--fg-mute);
+  font-size: 11px;
+}
+
+/* 재생 제어 + 진행 바 */
+.playerbar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) 20px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+.playerbar::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 3px;
+  border-radius: var(--rp);
+  background: var(--pgm);
+}
+.playerbar__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.playerbar__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.playerbar__time {
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+.playerbar__track {
+  height: 6px;
+  border-radius: var(--rp);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.playerbar__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--rp);
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+.empty {
+  font-size: 13px;
+  color: var(--fg-mute);
+  margin: 0;
+}
+
+.numrow {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.numrow__cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.numrow__rank {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em; /* 한글 라벨 — 자간 0 */
+  color: var(--fg-mute);
+}
+.hotkeytable {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hotkeytable th {
+  text-align: left;
+  padding: 6px 14px 6px 0;
+  color: var(--fg-soft);
+  font-weight: 600;
+}
+.hotkeytable td {
+  padding: 6px 0;
+  color: var(--fg-mute);
+}
+.snaplist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ════════════════════════════════════════════════════════ 원장 ([원장] 탭)
+ * 우측 상시 레일이었다가 U34에서 탭으로 내려왔다. 폭이 넉넉해졌으므로
+ * 행은 한 줄(시각·팀·점수·사유·액션)로 편다.
+ */
+
+.ledger__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+.ledger__count {
+  font-family: var(--font-num);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-mute);
+}
+/* [점수 전부 되돌리기] (U126) — count와 한 그룹으로 묶어 head의 space-between이
+   title↔(count+버튼) 2분할로 유지되게 한다. 버튼 하나 늘었다고 3분할로 퍼지면 안 된다. */
+.ledger__head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* ── 수동 가감점 ─────────────────────────────────────────── */
+.ledger-manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.18);
+}
+.ledger-manual__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+}
+.ledger-manual__teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ledger-manual__chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out), border-color 0.14s var(--ease-out);
+}
+.ledger-manual__chip:hover {
+  border-color: var(--team);
+  color: var(--fg);
+}
+.ledger-manual__chip.is-on {
+  border-color: var(--team);
+  background: color-mix(in srgb, var(--team) 26%, transparent);
+  color: var(--fg);
+}
+.ledger-manual__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ledger-manual__delta {
+  flex: 0 0 auto;
+  width: 116px;
+  font-family: var(--font-num);
+  text-align: right;
+}
+.ledger-manual__reason {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+/* ── 사회자 보너스 스트립 (U132) ──────────────────────────────
+ * 수동 가감점(`.ledger-manual`)과 같은 카드 톤을 쓰되, 한 팀이 한 줄을 차지하고 프리셋
+ * 버튼은 줄바꿈하지 않는다 — 사회자가 말하면서 누르는 자리라 버튼 위치가 매번 달라지면
+ * 안 된다. 좁아지면 줄바꿈 대신 버튼이 먼저 얇아진다(`min-width: 0` + 패딩 축소). */
+.bonus-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.18);
+}
+.bonus-strip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.bonus-strip__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+}
+.bonus-strip__hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+  opacity: 0.78;
+}
+.bonus-strip__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.bonus-strip__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 32px;
+}
+.bonus-strip__team {
+  flex: 0 0 88px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--team);
+}
+.bonus-strip__btns {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+/* U139 m4 — 실측 27px였다(12.5px × line-height 1.2 + 패딩 5px 두 번 + 보더 2px). 줄은 이미
+ * `min-height: 32px`라 버튼만 5px 낮아 위아래로 뜬 채였고, 사회자가 말하면서 누르는 자리라
+ * 히트 영역이 좁을 이유가 없다. 패딩 7px + `min-height: 32px`로 줄 높이에 딱 맞춘다 —
+ * 줄 자체의 높이는 그대로라 다른 행이 밀려나지 않는다. */
+.bonus-strip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  padding: 7px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-num);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out);
+}
+.bonus-strip__btn:hover {
+  border-color: var(--team);
+  background: color-mix(in srgb, var(--team) 20%, transparent);
+  color: var(--fg);
+}
+.bonus-strip__btn:focus-visible {
+  outline: 2px solid var(--team);
+  outline-offset: 1px;
+  color: var(--fg);
+}
+.bonus-strip__btn:active {
+  background: color-mix(in srgb, var(--team) 34%, transparent);
+}
+.bonus-strip__more {
+  flex: 0 0 auto;
+}
+
+/* ── 현재 총점 · 순위 (U136) ──────────────────────────────────
+ * 보너스 스트립과 같은 카드 톤을 쓰되 세로를 최대한 눌렀다 — 종목 카드를 밀어내면
+ * 정작 조작이 화면 아래로 내려간다. 사회자가 읽는 자리라 총점만 크게 두고 등수·팀명은
+ * 보조 크기로 낮췄다. 칩 자체는 줄바꿈하지 않고, 팀이 많아 넘치면 칩 단위로 다음 줄. */
+.standings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.18);
+}
+.standings__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.standings__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+}
+.standings__more {
+  flex: 0 0 auto;
+}
+.standings__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.standings__chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 10px;
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--team, var(--line)) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--team, transparent) 14%, transparent);
+}
+.standings__chip:focus-visible {
+  outline: 2px solid var(--team, var(--line));
+  outline-offset: 1px;
+}
+.standings__chip--empty {
+  border-color: var(--line);
+  background: transparent;
+}
+.standings__rank {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-dim);
+}
+/* 팀 이름 칸 기준은 세 자리가 같다 (U139): 6글자(`YELLOW`·한글 5~6자) + 말줄임 여유.
+ * 여기는 12px/600이라 96px면 넉넉하고, `.bonus-strip__team`(12.5px)은 88px,
+ * `.rankrow__team`(13px)은 88px floor다. */
+.standings__team {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--team, var(--fg-dim));
+}
+.standings__total {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 탭 안에서는 이 목록이 스스로 스크롤하지 않는다 — 바깥 `.tabbody` 하나만 스크롤해야
+ * 스크롤바가 겹치지 않고, 수동 가감점 폼이 목록에 눌려 잘리지도 않는다. */
+.ledger__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* 폭이 넉넉하므로 한 줄. 좁아지면 사유가 아래로 내려간다. */
+.ledger__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(96px, auto) minmax(72px, auto) minmax(0, 1fr) auto;
+  grid-template-areas: 'time team delta reason action';
+  gap: 2px var(--sp-3);
+  padding: var(--sp-2) 10px var(--sp-2) 18px;
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 12.5px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .ledger__row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'time team delta' 'reason reason action';
+    gap: 2px var(--sp-2);
+  }
+}
+.ledger__row::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  border-radius: var(--rp);
+  background: var(--team);
+}
+.ledger__row.is-void {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+.ledger__row.is-reversal {
+  background: rgba(226, 59, 59, 0.1);
+}
+.ledger__time {
+  grid-area: time;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-mute);
+  white-space: nowrap;
+}
+.ledger__team {
+  grid-area: team;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ledger__delta {
+  grid-area: delta;
+  text-align: right;
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+.ledger__delta.is-plus {
+  color: var(--ok);
+}
+.ledger__delta.is-minus {
+  color: var(--bad);
+}
+.ledger__reason {
+  grid-area: reason;
+  color: var(--fg-mute);
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ledger__row .btn,
+.ledger__flag {
+  grid-area: action;
+  justify-self: end;
+  white-space: nowrap;
+}
+.ledger__flag {
+  font-size: 10.5px;
+  color: var(--fg-mute);
+}
+.ledger__empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  color: var(--fg-mute);
+  padding: var(--sp-6) var(--sp-2);
+  text-align: center;
+}
+
+/* ════════════════════════════════════════════════════════ 모달 / 토스트 / 툴팁 */
+
+.modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(2, 4, 8, 0.74);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  width: min(520px, 90vw);
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-shadow: var(--shadow-lift);
+}
+/* 각진 상단 보더 대신 짧은 액센트 필 하나 */
+.modal::before {
+  content: '';
+  width: 40px;
+  height: 4px;
+  border-radius: var(--rp);
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+.modal--danger::before {
+  background: var(--danger);
+}
+.modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.modal__body {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--fg-dim);
+}
+.modal__body p {
+  margin: 0;
+}
+.modal__input {
+  min-height: var(--row-h);
+  padding: 10px 16px 9px;
+  border-radius: var(--rp);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  background: rgba(0, 0, 0, 0.36);
+  color: var(--fg);
+  font-size: 14px;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* inert 미지원 브라우저 폴백 — 조작 권한이 없는 창의 본문 클릭을 막는다.
+ * 루트 컨테이너에만 건다: `.scene-btn.is-locked`·`.cue.is-locked`·`.tabbar__btn.is-locked`은
+ * 2부 잠금 표시용이라 hover 툴팁("잠겨 있습니다…")이 살아 있어야 한다
+ * (잠긴 씬 버튼은 네이티브 disabled라 클릭 이벤트는 원래 없고, 안내 토스트는 F9/F10 단축키 경로만 낸다). */
+#app.is-locked,
+#modal-root.is-locked {
+  pointer-events: none;
+}
+
+/* ── 보조 패널 잠금 ─────────────────────────────────────────────────────────
+ * control이 두 창 이상 열렸을 때 리더가 아닌 창을 통째로 덮는다.
+ * 모달 위(z-index 100)보다 위에 있어야 한다 — 조작이 막힌 창에서 확인 모달만
+ * 떠 있으면 운영자가 이유를 알 수 없다. */
+.control-passive {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: var(--scrim-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6);
+}
+.control-passive__card {
+  width: min(540px, 92vw);
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-shadow: var(--shadow-lift);
+}
+.control-passive__card::before {
+  content: '';
+  width: 40px;
+  height: 4px;
+  border-radius: var(--rp);
+  background: var(--warn);
+  flex: 0 0 auto;
+}
+.control-passive__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.control-passive__desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--fg-dim);
+}
+.control-passive__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+.control-passive__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--fg-mute);
+}
+/* 인수 거절 등 그 자리에서 읽어야 하는 경고 — 힌트보다 한 단계 강하게 */
+.control-passive__notice {
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--r-item);
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--fg-soft);
+}
+.control-passive__card :where(.control-passive__hint, .control-passive__notice)[hidden] {
+  display: none;
+}
+.control-passive__card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#toast-root {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px 11px;
+  border-radius: var(--rp);
+  font-size: 13px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-lift);
+  animation: toast-in 0.2s var(--ease-out);
+}
+.toast::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.toast--warn::before {
+  background: var(--warn);
+}
+.toast--bad::before {
+  background: var(--bad);
+}
+.toast.is-out {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+/* 토스트 스택은 pointer-events: none 이다 — 액션이 붙은 토스트만 클릭을 받는다.
+ * (모든 토스트를 클릭 가능하게 두면 그 아래 조작 버튼이 잠깐 막힌다) */
+.toast--action {
+  pointer-events: auto;
+  padding-right: 12px;
+}
+.toast__text {
+  min-width: 0;
+}
+.toast__action {
+  flex: 0 0 auto;
+  margin-left: var(--sp-2);
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.tip {
+  position: fixed;
+  z-index: 300;
+  max-width: 300px;
+  padding: 10px 14px;
+  border-radius: var(--r-tile);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-lift), inset 0 0 0 1px var(--accent-a20);
+  color: var(--fg-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tip.is-on {
+  opacity: 1;
+}
+
+.overlaybar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+.overlaybar .field__label {
+  min-width: auto;
+}
+
+/* ════════════════════════════════════════════════════════ 전환 할당 (에셋 탭)
+ * 규칙 3계층(기본 / 도착 씬 / 조합 예외)을 한 화면에서 훑을 수 있게 접이식으로 둔다.
+ *
+ * 반응형 원칙: 각 행은 **절대 줄바꿈하지 않는다**(nowrap). 좁아지면 씬 라벨이
+ * 축약형으로 강등될 뿐이고, `<select>`는 하한 폭 아래로 줄지 않아 조작 불가가 되지
+ * 않는다. 세로로 팽창하면 11행짜리 목록이 화면 밖으로 밀려 더 나쁘다.
+ */
+
+.trules {
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.trules__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-4);
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.trules__summary::-webkit-details-marker {
+  display: none;
+}
+/* 접힘/펼침을 색이 아니라 형태(셰브런 회전)로 알린다 */
+.trules__summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 10px;
+  height: 6px;
+  background: currentcolor;
+  color: var(--fg-mute);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform: rotate(-90deg);
+  transition: transform 0.14s var(--ease-out);
+}
+.trules[open] > .trules__summary::before {
+  transform: rotate(0deg);
+}
+.trules__summary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.trules__summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.trules__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-soft);
+  letter-spacing: -0.01em;
+}
+.trules__badge {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.trules__body {
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+.trules__group-title {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-mute);
+  letter-spacing: 0;
+}
+/* 행이 `nowrap`이라 폭이 모자라면 오른쪽 끝([삭제] 버튼)이 잘려 손이 닿지 않는다.
+   세로 팽창 대신 가로 스크롤로 내보낸다 — 목록 높이는 그대로 두고 접근성만 지킨다. */
+.trules__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: auto;
+}
+/* 스크롤이 실제로 생기려면 자식이 컨테이너보다 넓어질 수 있어야 한다.
+   예외 행은 드롭다운 3개 + 버튼 2개라 가장 먼저 잘리는 행이다. */
+.trule--pair {
+  min-width: max-content;
+}
+
+.trule {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 38px;
+  padding: 3px var(--sp-3) 3px 10px;
+  border-radius: var(--r-item);
+  /* 지정 여부는 색만이 아니라 좌측 액센트 바 + `지정` 칩 + 라벨 굵기 3중으로 알린다 */
+  box-shadow: inset 3px 0 0 transparent;
+}
+.trule.is-set {
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.trule.is-set .trule__label {
+  color: var(--fg);
+  font-weight: 700;
+}
+.trule__label {
+  flex: 0 0 120px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  letter-spacing: -0.01em;
+}
+/* 축약 라벨은 좁은 폭에서만 나온다 — 둘 다 DOM에 있고 CSS가 하나만 보인다 */
+.trule__label-short {
+  display: none;
+}
+.trule__select {
+  flex: 1 1 auto;
+  min-width: 9rem;
+}
+/* 조합 예외의 씬 선택은 내용(씬 이름)이 짧아 하한을 낮춰도 잘리지 않는다.
+   3개 드롭다운이 한 줄에 들어가야 하므로 여기서 폭을 아낀다. */
+.trule__scene {
+  flex: 0 1 6.5rem;
+  min-width: 6.5rem;
+}
+.trule__arrow {
+  flex: 0 0 auto;
+  color: var(--fg-mute);
+  font-size: 12px;
+}
+.trule__chip {
+  flex: 0 0 auto;
+}
+.trule__info {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--rp);
+  color: var(--fg-mute);
+  font-size: 12px;
+  cursor: help;
+}
+.trule__info:hover,
+.trule__info:focus-visible {
+  color: var(--accent);
+  background: var(--accent-a12);
+}
+.trule .btn--tiny {
+  flex: 0 0 auto;
+}
+
+/* 1280 미만에서는 라벨 자리를 줄이고 축약형으로 강등한다.
+   드롭다운 하한 폭을 지키기 위한 것이지 미관 때문이 아니다. */
+@media (max-width: 1279px) {
+  .trule__label {
+    flex-basis: 76px;
+  }
+  .trule__label-full {
+    display: none;
+  }
+  .trule__label-short {
+    display: inline;
+  }
+}
+
+/* 툴팁은 `근거`를 여러 줄로 담는다 — 한 줄로 이어 붙이면 읽히지 않는다.
+   기존 한 줄짜리 팁에는 영향이 없다(줄바꿈이 없으므로). */
+.tip {
+  white-space: pre-line;
+}
+
+/* ════════════════════════════════════════════════════════ 현장 사진 탭
+ *
+ * 500장까지 쌓이는 목록이라 **그리는 비용**이 형태보다 먼저다.
+ *  · `content-visibility: auto` — 화면 밖 셀은 레이아웃·페인트를 건너뛴다.
+ *  · `contain-intrinsic-size` — 건너뛴 셀도 자리를 차지해 스크롤바가 튀지 않는다.
+ *  · 셀 크기는 고정이다. 사진 비율대로 늘리면 그리드가 매 이미지 디코드마다 재배치된다.
+ * 자간은 0 또는 음수만 쓴다(패널 공통 규약). 라틴 소형 대문자 라벨은 여기에 없다.
+ */
+
+.photo-source-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* 수집 소스 줄 · 재생 설정 줄 — **자리가 모자랄 때만** 다음 줄로 넘어간다.
+ *
+ * 이 프로젝트의 행 규약은 nowrap이지만, 그것은 에셋·전환 규칙처럼 **반복되는 목록 행**의
+ * 규약이다(한 행이 늘어나면 아래 전부가 밀린다). 여기는 컨트롤 3~5개짜리 단발 행이고,
+ * 1024 폭에서는 라벨을 아무리 줄여도 한 줄에 들어가지 않는다. 가로 스크롤로 두면
+ * `순서` 드롭다운이 잘린 채 **보이지 않아** 조작 불가가 된다 — 잘림보다 한 줄 늘어나는
+ * 쪽이 낫다는 것이 패널 관례의 우선순위다. 자식은 줄어들지 않게 고정한다. */
+.photo-source {
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.photo-source > * {
+  flex: 0 0 auto;
+}
+
+.photo-chip {
+  gap: 6px;
+  max-width: 300px;
+  cursor: help;
+}
+.photo-chip__mark {
+  font-size: 9px;
+  line-height: 1;
+}
+/* 폴더명이 길어도 칩이 줄을 바꾸거나 옆 버튼을 밀어내지 않는다 */
+.photo-chip__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 상태 줄 — 한 줄 고정. 좁으면 잘리고 상세는 hover/focus에 있다. */
+.photo-status {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 6px 12px 5px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: help;
+}
+.photo-status.is-busy {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-a40);
+}
+
+.photo-settings {
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.photo-settings > * {
+  flex: 0 0 auto;
+}
+.photo-settings .field__label {
+  min-width: auto;
+  white-space: nowrap;
+}
+
+.photogrid-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+.photogrid-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+.photogrid-head .section__title {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.photogrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.photocell {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-item);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: pointer;
+  /* 화면 밖 셀은 그리지 않는다 — 500장 그리드의 실질 (계획 §6-3 위험 R2) */
+  content-visibility: auto;
+  contain-intrinsic-size: 96px 72px;
+  transition: box-shadow 0.14s var(--ease-out), opacity 0.14s var(--ease-out);
+}
+.photocell:hover {
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.photocell:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.photocell__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/*
+ * 아직 썸네일을 읽지 않은 칸 — 화면에 들어와야 요청이 나간다(tab-photos `observeCell`).
+ * `src`가 붙기 전에는 셀의 어두운 배경만 보이게 둔다. 자리는 `aspect-ratio`가 이미
+ * 잡아 두었으므로 나중에 그림이 들어와도 그리드가 밀리지 않는다.
+ */
+.photocell__img:not([src]) {
+  opacity: 0;
+}
+
+/* 숨김의 3중 신호 — (1) 흐림+그레이스케일 (2) 좌상단 배지 (3) 점선 테두리 */
+.photocell.is-hidden .photocell__img {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.photocell.is-hidden {
+  box-shadow: none;
+  outline: 1px dashed var(--line-2);
+  outline-offset: -1px;
+}
+.photocell.is-hidden:focus-visible {
+  outline-color: var(--accent);
+}
+.photocell__badge {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  padding: 1px 7px 0;
+  border-radius: var(--rp);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: rgba(0, 0, 0, 0.78);
+  pointer-events: none;
+}
+.photocell:not(.has-badge) .photocell__badge {
+  display: none;
+}
+.photocell__p2 {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 7px 0;
+  border-radius: var(--rp);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--accent);
+  background: var(--accent-a12);
+  box-shadow: inset 0 0 0 1px var(--accent-a40);
+  pointer-events: none;
+}
+
+/* 썸네일 blob이 사라진 사진 — 목록에는 남지만 그릴 그림이 없다는 것을 그 자리에서 알린다 */
+.photocell.is-broken::after {
+  content: '없음';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--fg-mute);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* 1024 폭에서는 가운데 열이 좁아진다 — 셀을 한 단계 줄여 한 줄에 최소 3칸을 지킨다 */
+@media (max-width: 1279px) {
+  .photogrid {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  }
+  .photo-chip {
+    max-width: 200px;
+  }
+}
